@@ -114,6 +114,7 @@ void ledSysOn(const bool fixed);
 void ledSysOff(const bool fixed);
 void ledSysSet(const bool newState);
 void ledSysSetEnabled(const bool newEnabled);
+void ledSysActivity();
 void ledSysFlashOn(const uint16_t quantity, const uint16_t duration, const uint16_t interval);
 void ledSysBlinkOn(const uint16_t quantity, const uint16_t duration, const uint16_t interval);
 void ledSysBlinkOff();

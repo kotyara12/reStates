@@ -376,6 +376,13 @@ void ledSysSetEnabled(const bool newEnabled)
   };
 }
 
+void ledSysActivity()
+{
+  if (_ledSysQueue) {
+    ledTaskSend(_ledSysQueue, lmFlash, CONFIG_LEDSYS_FLASH_QUANTITY, CONFIG_LEDSYS_FLASH_DURATION, CONFIG_LEDSYS_FLASH_INTERVAL);
+  };
+}
+
 void ledSysFlashOn(const uint16_t quantity, const uint16_t duration, const uint16_t interval)
 {
   if (_ledSysQueue) {
@@ -477,29 +484,19 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
 {
   re_system_event_data_t* data = (re_system_event_data_t*)event_data;
   if (data) {
-    // System LED
-    if (event_id == RE_SYS_SYSLED) {
-      if (data->type == RE_SYS_SET) {
-        ledSysOn(data->forced);
-      } else if (data->type == RE_SYS_CLEAR) {
-        ledSysOff(data->forced);
-      } else if (data->type == RE_SYS_FLASH) {
-        ledSysFlashOn(CONFIG_LEDSYS_FLASH_QUANTITY, CONFIG_LEDSYS_FLASH_DURATION, CONFIG_LEDSYS_FLASH_INTERVAL);
-      }
-    }
     // OTA
-    else if (event_id == RE_SYS_OTA) {
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SYS_OTA");
+    if (event_id == RE_SYS_OTA) {
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SYS_OTA");
       statesSet(SYSTEM_OTA);
     }
     // Error
     else if (event_id == RE_SYS_ERROR) {
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_ERROR", data->type);
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_ERROR", data->type);
       statesSetError(ERR_GENERAL, data->type != RE_SYS_CLEAR);
     }
     // Telegram error
     else if (event_id == RE_SYS_TELEGRAM_ERROR) {
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_TELEGRAM_ERROR", data->type);
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_TELEGRAM_ERROR", data->type);
       statesSetError(ERR_TELEGRAM, data->type != RE_SYS_CLEAR);
     }
     // OpenMon
@@ -526,7 +523,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
           _timeLostOpenMon = 0;
         };
       };
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_OPENMON_ERROR", data->type);
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_OPENMON_ERROR", data->type);
     }
     // ThingSpeak
     else if (event_id == RE_SYS_THINGSPEAK_ERROR) {
@@ -552,7 +549,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
           _timeLostThingSpeak = 0;
         };
       };
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_THINGSPEAK_ERROR", data->type);
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_THINGSPEAK_ERROR", data->type);
     };
   };
 }
@@ -563,13 +560,13 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
     // Received time from hardware real time clock
     case RE_TIME_RTC_ENABLED:
       statesSet(TIME_RTC_ENABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_RTC_ENABLED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_RTC_ENABLED");
       break;
 
     // Received time from NTP server
     case RE_TIME_SNTP_SYNC_OK:
       statesSet(TIME_SNTP_SYNC_OK);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "TIME_SNTP_SYNC_OK");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "TIME_SNTP_SYNC_OK");
       break;
 
     #if CONFIG_SILENT_MODE_ENABLE
@@ -577,7 +574,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
     case RE_TIME_SILENT_MODE_ON:
       statesSet(TIME_SILENT_MODE);
       ledSysSetEnabled(false);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_ON");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_ON");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
         tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_ON);
       #endif // CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
@@ -586,7 +583,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
     case RE_TIME_SILENT_MODE_OFF:
       statesClear(TIME_SILENT_MODE);
       ledSysSetEnabled(true);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_OFF");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_OFF");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
         tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_OFF);
       #endif // CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
@@ -595,7 +592,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
 
     // Ignore...
     default:
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
       break;
   };
 }
@@ -606,26 +603,26 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
     case RE_WIFI_STA_INIT:
       _timeLostWiFi = 0;
       statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
       break;
 
     case RE_WIFI_STA_STARTED:
       statesSet(WIFI_STA_STARTED);
       statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
       break;
 
     case RE_WIFI_STA_GOT_IP:
       statesSet(WIFI_STA_CONNECTED);
       statesClear(INET_AVAILABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
       break;
     
     case RE_WIFI_STA_PING_OK:
       statesSet(INET_AVAILABLED);
       _timeLostOpenMon = 0;
       _timeLostThingSpeak = 0;
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_OK");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_OK");
       if (_timeLostWiFi == 0) {
         #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
           if (event_data) {
@@ -651,7 +648,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
       statesClear(INET_AVAILABLED);
       _timeLostOpenMon = 0;
       _timeLostThingSpeak = 0;
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_FAILED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_FAILED");
       break;
 
     case RE_WIFI_STA_DISCONNECTED:
@@ -662,12 +659,12 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
       };
       _timeLostOpenMon = 0;
       _timeLostThingSpeak = 0;
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
       break;
 
     default:
       // Ignore...
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
       break;
   };
 }
@@ -681,7 +678,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
   switch (event_id) {
     case RE_MQTT_CONNECTED:
       statesSet(MQTT_CONNECTED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONNECTED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONNECTED");
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         statesSetBit(MQTT_PRIMARY, data->primary);
@@ -702,7 +699,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_CONN_LOST:
       statesClear(MQTT_CONNECTED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_LOST");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_LOST");
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
@@ -718,7 +715,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_CONN_FAILED:
       statesClear(MQTT_CONNECTED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_FAILED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_FAILED");
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
@@ -734,7 +731,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_SERVER_PRIMARY:
       // statesSet(MQTT_PRIMARY);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_PRIMARY");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_PRIMARY");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (statesInetIsAvailabled()) {
           tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
@@ -746,7 +743,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_SERVER_RESERVED:
       // statesClear(MQTT_PRIMARY);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_RESERVED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_RESERVED");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (statesInetIsAvailabled()) {
           tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
@@ -758,7 +755,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_ERROR:
       statesSetErrors(ERR_MQTT);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (event_data) {
           char* error = (char*)event_data;
@@ -771,12 +768,12 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_ERROR_CLEAR:
       statesClearErrors(ERR_MQTT);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR_CLEAR");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR_CLEAR");
       break;
 
     default:
       // Ignore...
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
       break;
   };
 }
@@ -787,17 +784,17 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
   switch (event_id) {
     case RE_PING_INET_AVAILABLE:
       // The status will be changed upon the RE_WIFI_STA_PING_OK event
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_AVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_AVAILABLE");
       break;
 
     case RE_PING_INET_UNAVAILABLE:
       // The status will be changed upon the RE_WIFI_STA_PING_FAILED event
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_UNAVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_UNAVAILABLE");
       break;
 
     case RE_PING_MQTT1_AVAILABLE:
       statesSet(MQTT_1_ENABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_AVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_AVAILABLE");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
@@ -813,7 +810,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
     case RE_PING_MQTT2_AVAILABLE:
       statesSet(MQTT_2_ENABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_AVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_AVAILABLE");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
@@ -829,7 +826,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
     case RE_PING_MQTT1_UNAVAILABLE:
       statesClear(MQTT_1_ENABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_UNAVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_UNAVAILABLE");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
@@ -844,7 +841,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
     case RE_PING_MQTT2_UNAVAILABLE:
       statesClear(MQTT_2_ENABLED);
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_UNAVAILABLE");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_UNAVAILABLE");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
@@ -859,7 +856,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
     default:
       // Ignore...
-      rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "IGNORED");
       break;
   };
 }
@@ -867,7 +864,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
 static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
-  rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SENSOR_STATUS_CHANGED");
+  // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SENSOR_STATUS_CHANGED");
 
   sensor_event_status_t* data = (sensor_event_status_t*)event_data;
   if (data) {
