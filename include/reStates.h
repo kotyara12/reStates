@@ -15,6 +15,8 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "reLed.h"
+#include "project_config.h"
+#include "def_consts.h"
 
 // System flags
 static const uint32_t SYSTEM_OTA           = BIT0;

@@ -4,10 +4,12 @@
 #include "rStrings.h"
 #include "rLog.h"
 #include "rSensor.h"
+#include "project_config.h"
+#include "def_consts.h"
 #if CONFIG_TELEGRAM_ENABLE
 #include "reTgSend.h"
 #endif // CONFIG_TELEGRAM_ENABLE
-#include "def_consts.h"
+
 
 static EventGroupHandle_t _evgStates = nullptr;
 static EventGroupHandle_t _evgErrors = nullptr;
