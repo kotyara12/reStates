@@ -331,7 +331,7 @@ static ledQueue_t _ledSysQueue = NULL;
 void ledSysInit(int8_t ledGPIO, bool ledHigh, ledCustomControl_t customControl)
 {
   if (_ledSysQueue == NULL) {
-    _ledSysQueue = ledTaskCreate(ledGPIO, ledHigh, "led_system", customControl);
+    _ledSysQueue = ledTaskCreate(ledGPIO, ledHigh, true, "led_system", customControl);
   };
 }
 
@@ -945,7 +945,9 @@ bool statesEventHandlerRegister()
             && eventHandlerRegister(RE_PING_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerPing, nullptr)
           #endif // CONFIG_PINGER_ENABLE
           && eventHandlerRegister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor, nullptr);
-  if (ret) rlog_d(logTAG, "System states event handlers registered");
+  if (ret) {
+    rlog_d(logTAG, "System states event handlers registered");
+  };
   return ret;
 }
 
