@@ -7,7 +7,7 @@
 #if CONFIG_TELEGRAM_ENABLE
 #include "reTgSend.h"
 #endif // CONFIG_TELEGRAM_ENABLE
-#include "def_led_modes.h"
+#include "def_consts.h"
 
 static EventGroupHandle_t _evgStates = nullptr;
 static EventGroupHandle_t _evgErrors = nullptr;
