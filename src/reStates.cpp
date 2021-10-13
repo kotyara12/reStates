@@ -864,7 +864,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
 static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
-  // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SENSOR_STATUS_CHANGED");
+  rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SENSOR_STATUS_CHANGED");
 
   sensor_event_status_t* data = (sensor_event_status_t*)event_data;
   if (data) {
