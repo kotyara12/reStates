@@ -14,8 +14,6 @@
 static EventGroupHandle_t _evgStates = nullptr;
 static EventGroupHandle_t _evgErrors = nullptr;
 static time_t _timeLostWiFi = 0;
-static time_t _timeLostThingSpeak = 0;
-static time_t _timeLostOpenMon = 0;
 
 static const char* logTAG   = "STATES";
 #define DEBUG_LOG_EVENT_MESSAGE "Received event: event_base=[%s], event_id=[%s]"
@@ -505,8 +503,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
     else if (event_id == RE_SYS_OPENMON_ERROR) {
       if (data->type != RE_SYS_CLEAR) {
         statesSetErrors(ERR_OPENMON);
-        if (statesInetIsAvailabled() && (_timeLostOpenMon == 0)) {
-          _timeLostOpenMon = time(nullptr);
+        if (statesInetIsAvailabled()) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
             tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
               CONFIG_TELEGRAM_DEVICE,
@@ -515,14 +512,13 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
         };
       } else {
         statesClearErrors(ERR_OPENMON);
-        if (_timeLostOpenMon != 0) {
+        if (data->data != 0) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, "open-monitoring.online", 
-              _timeLostOpenMon);
+              (time_t)data->data);
           #endif // CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
-          _timeLostOpenMon = 0;
         };
       };
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_OPENMON_ERROR", data->type);
@@ -531,8 +527,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
     else if (event_id == RE_SYS_THINGSPEAK_ERROR) {
       if (data->type != RE_SYS_CLEAR) {
         statesSetErrors(ERR_THINGSPEAK);
-        if (statesInetIsAvailabled() && (_timeLostThingSpeak == 0)) {
-          _timeLostThingSpeak = time(nullptr);
+        if (statesInetIsAvailabled()) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
             tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
               CONFIG_TELEGRAM_DEVICE,
@@ -541,14 +536,13 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
         };
       } else {
         statesClearErrors(ERR_THINGSPEAK);
-        if (_timeLostThingSpeak != 0) {
+        if (data->data != 0) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, "thingspeak.com", 
-              _timeLostThingSpeak);
+              (time_t)data->data);
           #endif // CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
-          _timeLostThingSpeak = 0;
         };
       };
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_THINGSPEAK_ERROR", data->type);
@@ -622,8 +616,6 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
     
     case RE_WIFI_STA_PING_OK:
       statesSet(INET_AVAILABLED);
-      _timeLostOpenMon = 0;
-      _timeLostThingSpeak = 0;
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_OK");
       if (_timeLostWiFi == 0) {
         #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
@@ -648,8 +640,6 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
 
     case RE_WIFI_STA_PING_FAILED:
       statesClear(INET_AVAILABLED);
-      _timeLostOpenMon = 0;
-      _timeLostThingSpeak = 0;
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_PING_FAILED");
       break;
 
@@ -659,8 +649,6 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
       if (_timeLostWiFi == 0) {
         _timeLostWiFi = time(nullptr);
       };
-      _timeLostOpenMon = 0;
-      _timeLostThingSpeak = 0;
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
       break;
 
@@ -758,14 +746,14 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
     case RE_MQTT_ERROR:
       statesSetErrors(ERR_MQTT);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR");
-      #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
+      #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS
         if (event_data) {
           char* error = (char*)event_data;
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_MQTT_ERROR, error);
         };
-      #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
+      #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS
       break;
 
     case RE_MQTT_ERROR_CLEAR:
