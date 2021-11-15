@@ -2,6 +2,7 @@
 #include "reStates.h"
 #include "reEvents.h"
 #include "rStrings.h"
+#include "reEsp32.h"
 #include "rLog.h"
 #include "rSensor.h"
 #include "project_config.h"
@@ -30,6 +31,8 @@ void ledSysBlinkAuto();
 // ---------------------------------------------------- System states ----------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
+void heapAllocFailedInit();
+
 void statesInit(bool registerEventHandler)
 {
   if (!_evgStates) {
@@ -47,6 +50,10 @@ void statesInit(bool registerEventHandler)
       _evgErrors = xEventGroupCreate();
     #endif // CONFIG_STATES_STATIC_ALLOCATION
     xEventGroupClearBits(_evgErrors, 0x00FFFFFFU);
+  };
+
+  if ((_evgStates) && (_evgErrors)) {
+    heapAllocFailedInit();
   };
 
   if ((_evgStates) && (_evgErrors) && registerEventHandler) {
@@ -320,6 +327,35 @@ bool statesSetError(EventBits_t bit, bool state)
   } else {
     return statesClearErrors(bit);
   };
+}
+
+// -----------------------------------------------------------------------------------------------------------------------
+// ------------------------------------------- Fixing memory allocation errors -------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------
+
+static uint32_t heapFailsCount = 0;
+
+void heapAllocFailedHook(size_t requested_size, uint32_t caps, const char *function_name)
+{
+  rlog_e("HEAP", "%s was called but failed to allocate %d bytes with 0x%X capabilities.", function_name, requested_size, caps);
+  heapFailsCount++;
+}
+
+uint32_t heapAllocFailedCount() 
+{
+  return heapFailsCount;
+}
+
+
+void heapAllocFailedInit()
+{
+  heap_caps_register_failed_alloc_callback(heapAllocFailedHook);
+  heapFailsCount = 0;
+}
+
+void heapCapsDebug(const char *function_name)
+{
+  rlog_w("HEAP", "%s: heap free %.3f% %", function_name, 100.0 * (double)heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / (double)heap_caps_get_total_size(MALLOC_CAP_DEFAULT));
 }
 
 // -----------------------------------------------------------------------------------------------------------------------
@@ -886,7 +922,7 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
         break;
     };
 
-    #if CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE
+    #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE
       // Sensor status change notification
       rSensor* sensor = (rSensor*)data->sensor;
       switch ((sensor_status_t)data->new_status) {
@@ -921,7 +957,7 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
             CONFIG_MESSAGE_TG_SENSOR_STATE_UNKNOWN_ERROR, sensor->getName());
           break;
       };
-    #endif // CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE
+    #endif // CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE
   };
 }
 
