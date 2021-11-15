@@ -897,28 +897,28 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
     // Set new status
     switch (data->sensor_id) {
       case 1:
-        statesSetError(ERR_SENSOR_1, data->new_status != 0);
+        statesSetError(ERR_SENSOR_1, data->new_status != SENSOR_STATUS_OK);
         break;
       case 2:
-        statesSetError(ERR_SENSOR_2, data->new_status != 0);
+        statesSetError(ERR_SENSOR_2, data->new_status != SENSOR_STATUS_OK);
         break;
       case 3:
-        statesSetError(ERR_SENSOR_3, data->new_status != 0);
+        statesSetError(ERR_SENSOR_3, data->new_status != SENSOR_STATUS_OK);
         break;
       case 4:
-        statesSetError(ERR_SENSOR_4, data->new_status != 0);
+        statesSetError(ERR_SENSOR_4, data->new_status != SENSOR_STATUS_OK);
         break;
       case 5:
-        statesSetError(ERR_SENSOR_5, data->new_status != 0);
+        statesSetError(ERR_SENSOR_5, data->new_status != SENSOR_STATUS_OK);
         break;
       case 6:
-        statesSetError(ERR_SENSOR_6, data->new_status != 0);
+        statesSetError(ERR_SENSOR_6, data->new_status != SENSOR_STATUS_OK);
         break;
       case 7:
-        statesSetError(ERR_SENSOR_7, data->new_status != 0);
+        statesSetError(ERR_SENSOR_7, data->new_status != SENSOR_STATUS_OK);
         break;
       default:
-        statesSetError(ERR_SENSOR_0, data->new_status != 0);
+        statesSetError(ERR_SENSOR_0, data->new_status != SENSOR_STATUS_OK);
         break;
     };
 
