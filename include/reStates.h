@@ -43,16 +43,17 @@ static const uint32_t MQTT_LOCAL           = BIT20;
 
 // Errors
 static const uint32_t ERR_GENERAL          = BIT0;
-static const uint32_t ERR_MQTT             = BIT1;
+static const uint32_t ERR_HEAP             = BIT1;
+static const uint32_t ERR_MQTT             = BIT2;
 
-static const uint32_t ERR_TELEGRAM         = BIT2;
-static const uint32_t ERR_SMTP             = BIT3;
+static const uint32_t ERR_TELEGRAM         = BIT3;
+static const uint32_t ERR_SMTP             = BIT4;
 static const uint32_t ERR_NOTIFY           = ERR_TELEGRAM | ERR_SMTP;
 
-static const uint32_t ERR_SITE             = BIT4;
-static const uint32_t ERR_THINGSPEAK       = BIT5;
-static const uint32_t ERR_OPENMON          = BIT6;
-static const uint32_t ERR_NARODMON         = BIT7;
+static const uint32_t ERR_SITE             = BIT5;
+static const uint32_t ERR_THINGSPEAK       = BIT6;
+static const uint32_t ERR_OPENMON          = BIT7;
+static const uint32_t ERR_NARODMON         = BIT8;
 static const uint32_t ERR_PUBLISH          = ERR_SITE | ERR_THINGSPEAK | ERR_OPENMON | ERR_NARODMON;
 
 static const uint32_t ERR_SENSOR_0         = BIT16;
@@ -108,6 +109,9 @@ bool statesMqttIsConnected();
 bool statesMqttIsPrimary();
 bool statesMqttIsLocal();
 bool statesMqttIsServerEnabled();
+
+void heapAllocFailedInit();
+uint32_t heapAllocFailedCount();
 
 void ledSysInit(int8_t ledGPIO, bool ledHigh, ledCustomControl_t customControl);
 void ledSysFree();
