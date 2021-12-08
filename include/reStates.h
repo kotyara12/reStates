@@ -30,8 +30,6 @@ static const uint32_t TIME_IS_OK           = TIME_RTC_ENABLED | TIME_SNTP_SYNC_O
 // WiFi
 static const uint32_t WIFI_STA_STARTED     = BIT8;
 static const uint32_t WIFI_STA_CONNECTED   = BIT9;
-static const uint32_t WIFI_AP_STARTED      = BIT10;
-static const uint32_t WIFI_AP_CONNECTED    = BIT11;
 static const uint32_t INET_AVAILABLED      = BIT12;
 
 // MQTT 
@@ -76,6 +74,7 @@ bool statesEventHandlerRegister();
 void statesEventHandlerUnregister();
 
 EventBits_t statesGet();
+char* statesGetJson();
 bool statesCheck(EventBits_t bits, const bool clearOnExit);
 bool statesClear(EventBits_t bits);
 bool statesSet(EventBits_t bits);
@@ -91,6 +90,7 @@ bool statesInetWait(TickType_t timeout);
 bool statesInetWaitMs(TickType_t timeout);
 
 EventBits_t statesGetErrors();
+char* statesGetErrorsJson();
 bool statesCheckErrors(EventBits_t bits, const bool clearOnExit);
 bool statesCheckErrorsAll(const bool clearOnExit);
 bool statesSetErrors(EventBits_t bits);

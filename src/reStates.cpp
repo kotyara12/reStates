@@ -5,6 +5,8 @@
 #include "reEsp32.h"
 #include "rLog.h"
 #include "rSensor.h"
+#include "reWiFi.h"
+#include "reNvs.h"
 #include "project_config.h"
 #include "def_consts.h"
 #if CONFIG_TELEGRAM_ENABLE
@@ -329,6 +331,51 @@ bool statesSetError(EventBits_t bit, bool state)
   };
 }
 
+// -----------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------- JSON routines ----------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------
+
+char* statesGetJson()
+{
+  EventBits_t states = statesGet(); 
+  return malloc_stringf("{\"ota\":%d,\"rtc_enabled\":%d,\"sntp_sync\":%d,\"silent_mode\":%d,\"wifi_sta_started\":%d,\"wifi_sta_connected\":%d,\"inet_availabled\":%d,\"mqtt1_enabled\":%d,\"mqtt2_enabled\":%d,\"mqtt_connected\":%d,\"mqtt_primary\":%d,\"mqtt_local\":%d}",
+    (states & SYSTEM_OTA) == SYSTEM_OTA,
+    (states & TIME_RTC_ENABLED) == TIME_RTC_ENABLED,
+    (states & TIME_SNTP_SYNC_OK) == TIME_SNTP_SYNC_OK,
+    (states & TIME_SILENT_MODE) == TIME_SILENT_MODE,
+    (states & WIFI_STA_STARTED) == WIFI_STA_STARTED,
+    (states & WIFI_STA_CONNECTED) == WIFI_STA_CONNECTED,
+    (states & INET_AVAILABLED) == INET_AVAILABLED,
+    (states & MQTT_1_ENABLED) == MQTT_1_ENABLED,
+    (states & MQTT_2_ENABLED) == MQTT_2_ENABLED,
+    (states & MQTT_CONNECTED) == MQTT_CONNECTED,
+    (states & MQTT_PRIMARY) == MQTT_PRIMARY,
+    (states & MQTT_LOCAL) == MQTT_LOCAL);
+};
+
+char* statesGetErrorsJson()
+{
+  EventBits_t errors = statesGetErrors();
+  return malloc_stringf("{\"general\":%d,\"heap\":%d,\"mqtt\":%d,\"telegram\":%d,\"smtp\":%d,\"site\":%d,\"thingspeak\":%d,\"openmon\":%d,\"narodmon\":%d,\"sensor1\":%d,\"sensor2\":%d,\"sensor3\":%d,\"sensor4\":%d,\"sensor5\":%d,\"sensor6\":%d,\"sensor7\":%d,\"sensor8\":%d}",
+    (errors & ERR_GENERAL) == ERR_GENERAL,
+    (errors & ERR_HEAP) == ERR_HEAP,
+    (errors & ERR_MQTT) == ERR_MQTT,
+    (errors & ERR_TELEGRAM) == ERR_TELEGRAM,
+    (errors & ERR_SMTP) == ERR_SMTP,
+    (errors & ERR_SITE) == ERR_SITE,
+    (errors & ERR_THINGSPEAK) == ERR_THINGSPEAK,
+    (errors & ERR_OPENMON) == ERR_OPENMON,
+    (errors & ERR_NARODMON) == ERR_NARODMON,
+    (errors & ERR_SENSOR_0) == ERR_SENSOR_0,
+    (errors & ERR_SENSOR_1) == ERR_SENSOR_1,
+    (errors & ERR_SENSOR_2) == ERR_SENSOR_2,
+    (errors & ERR_SENSOR_3) == ERR_SENSOR_3,
+    (errors & ERR_SENSOR_4) == ERR_SENSOR_4,
+    (errors & ERR_SENSOR_5) == ERR_SENSOR_5,
+    (errors & ERR_SENSOR_6) == ERR_SENSOR_6,
+    (errors & ERR_SENSOR_7) == ERR_SENSOR_7);
+};
+  
 // -----------------------------------------------------------------------------------------------------------------------
 // ------------------------------------------- Fixing memory allocation errors -------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
@@ -667,7 +714,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
           tgNotifyOnRecoveryAccess(
             CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, 
-            CONFIG_MESSAGE_TG_WIFI_AVAILABLE, nullptr, 
+            CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), 
             _timeLostWiFi);
         #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
         _timeLostWiFi = 0;
