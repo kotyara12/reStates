@@ -18,19 +18,19 @@
 #include "project_config.h"
 #include "def_consts.h"
 
-// System flags
-static const uint32_t SYSTEM_OTA           = BIT0;
-
 // Time
-static const uint32_t TIME_RTC_ENABLED     = BIT4;
-static const uint32_t TIME_SNTP_SYNC_OK    = BIT5;
-static const uint32_t TIME_SILENT_MODE     = BIT6;
+static const uint32_t TIME_RTC_ENABLED     = BIT0;
+static const uint32_t TIME_SNTP_SYNC_OK    = BIT1;
+static const uint32_t TIME_SILENT_MODE     = BIT2;
 static const uint32_t TIME_IS_OK           = TIME_RTC_ENABLED | TIME_SNTP_SYNC_OK;
 
 // WiFi
-static const uint32_t WIFI_STA_STARTED     = BIT8;
-static const uint32_t WIFI_STA_CONNECTED   = BIT9;
-static const uint32_t INET_AVAILABLED      = BIT12;
+static const uint32_t WIFI_STA_STARTED     = BIT5;
+static const uint32_t WIFI_STA_CONNECTED   = BIT6;
+static const uint32_t INET_AVAILABLED      = BIT7;
+
+// System flags
+static const uint32_t SYSTEM_OTA           = BIT10;
 
 // MQTT 
 static const uint32_t MQTT_1_ENABLED       = BIT16;

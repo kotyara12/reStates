@@ -494,7 +494,7 @@ void ledSysBlinkAuto()
   if (states & SYSTEM_OTA) {
     ledSysBlinkOn(CONFIG_LEDSYS_OTA_QUANTITY, CONFIG_LEDSYS_OTA_DURATION, CONFIG_LEDSYS_OTA_INTERVAL);
   }
-  if (errors & ERR_GENERAL) {
+  else if (errors & ERR_GENERAL) {
     ledSysBlinkOn(CONFIG_LEDSYS_ERROR_QUANTITY, CONFIG_LEDSYS_ERROR_DURATION, CONFIG_LEDSYS_ERROR_INTERVAL);
   }
   else if (errors & ERR_SENSORS) {
@@ -569,8 +569,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
   if (data) {
     // OTA
     if (event_id == RE_SYS_OTA) {
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SYS_OTA");
-      statesSet(SYSTEM_OTA);
+      statesSetBit(SYSTEM_OTA, data->type != RE_SYS_CLEAR);
     }
     // Error
     else if (event_id == RE_SYS_ERROR) {
