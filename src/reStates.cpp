@@ -4,7 +4,7 @@
 #include "rStrings.h"
 #include "reEsp32.h"
 #include "rLog.h"
-#include "rSensor.h"
+#include "reSensor.h"
 #include "reWiFi.h"
 #include "reNvs.h"
 #include "project_config.h"
