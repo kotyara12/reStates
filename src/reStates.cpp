@@ -533,27 +533,29 @@ void ledSysBlinkAuto()
 #if CONFIG_TELEGRAM_ENABLE
 
 // Sending a notification when access to something is restored
-void tgNotifyOnRecoveryAccess(bool msg_notify, const char* msg_template, const char* msg_object, time_t time_unavailable)
+void tgNotifyOnRecoveryAccess(bool msg_notify, const char* msg_template, const char* msg_object, time_t time_unavailable, time_t minimal_failure)
 {
   if (time_unavailable > 1000000000) {
     time_t time_restore = time(nullptr);
     time_t loss_period = time_restore - time_unavailable;
-    uint16_t loss_h = loss_period / 3600;
-    uint16_t loss_m = loss_period % 3600 / 60;
-    uint16_t loss_s = loss_period % 3600 % 60;
-    char* s_time_restore = malloc_timestr(CONFIG_FORMAT_DTS, time_restore);
-    char* s_time_unavailable = malloc_timestr(CONFIG_FORMAT_DTS, time_unavailable);
-    if ((s_time_restore) && (s_time_unavailable)) {
-      if (msg_object) {
-        tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
-          msg_template, msg_object, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
-      } else {
-        tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
-          msg_template, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
+    if (loss_period > minimal_failure) {
+      uint16_t loss_h = loss_period / 3600;
+      uint16_t loss_m = loss_period % 3600 / 60;
+      uint16_t loss_s = loss_period % 3600 % 60;
+      char* s_time_restore = malloc_timestr(CONFIG_FORMAT_DTS, time_restore);
+      char* s_time_unavailable = malloc_timestr(CONFIG_FORMAT_DTS, time_unavailable);
+      if ((s_time_restore) && (s_time_unavailable)) {
+        if (msg_object) {
+          tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
+            msg_template, msg_object, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
+        } else {
+          tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
+            msg_template, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
+        };
       };
+      if (s_time_restore) free(s_time_restore);
+      if (s_time_unavailable) free(s_time_unavailable);
     };
-    if (s_time_restore) free(s_time_restore);
-    if (s_time_unavailable) free(s_time_unavailable);
   };
 }
 
@@ -599,7 +601,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, "open-monitoring.online", 
-              (time_t)data->data);
+              (time_t)data->data, 0);
           #endif // CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
         };
       };
@@ -623,7 +625,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, "thingspeak.com", 
-              (time_t)data->data);
+              (time_t)data->data, 0);
           #endif // CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
         };
       };
@@ -706,7 +708,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
               CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, 
-              *data);
+              *data, CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME);
           };
         #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
       } else {
@@ -714,7 +716,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
           tgNotifyOnRecoveryAccess(
             CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, 
             CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), 
-            _timeLostWiFi);
+            _timeLostWiFi, CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME);
         #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
         _timeLostWiFi = 0;
       };
@@ -874,7 +876,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, data->host_name, 
-              data->time_unavailable);
+              data->time_unavailable, 0);
           };
         };
       #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
@@ -890,7 +892,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
             tgNotifyOnRecoveryAccess(
               CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
               CONFIG_MESSAGE_TG_HOST_AVAILABLE, data->host_name, 
-              data->time_unavailable);
+              data->time_unavailable, 0);
           };
         };
       #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
