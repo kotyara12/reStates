@@ -3,6 +3,7 @@
 #include "reEvents.h"
 #include "rStrings.h"
 #include "reEsp32.h"
+#include "esp_timer.h"
 #include "rLog.h"
 #include "reSensor.h"
 #include "reWiFi.h"
@@ -386,13 +387,19 @@ void heapAllocFailedHook(size_t requested_size, uint32_t caps, const char *funct
 {
   rlog_e("HEAP", "%s was called but failed to allocate %d bytes with 0x%X capabilities.", function_name, requested_size, caps);
   heapFailsCount++;
+  #if CONFIG_HEAP_ALLOC_FAILED_RESTART
+    #if defined(CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY) && (CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY > 0) 
+      espRestart(RR_HEAP_ALLOCATION_FAILED, CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY); 
+    #else
+      espRestart(RR_HEAP_ALLOCATION_FAILED, 0); 
+    #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART_WAIT
+  #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART
 }
 
 uint32_t heapAllocFailedCount() 
 {
   return heapFailsCount;
 }
-
 
 void heapAllocFailedInit()
 {
