@@ -109,6 +109,7 @@ bool statesMqttIsConnected();
 bool statesMqttIsPrimary();
 bool statesMqttIsLocal();
 bool statesMqttIsServerEnabled();
+bool statesMqttIsEnabled();
 
 void heapAllocFailedInit();
 uint32_t heapAllocFailedCount();
