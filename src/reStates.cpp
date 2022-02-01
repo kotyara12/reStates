@@ -558,10 +558,10 @@ void tgNotifyOnRecoveryAccess(bool msg_notify, const char* msg_template, const c
       char* s_time_unavailable = malloc_timestr(CONFIG_FORMAT_DTS, time_unavailable);
       if ((s_time_restore) && (s_time_unavailable)) {
         if (msg_object) {
-          tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
+          tgSend(TG_SERVICE, msg_notify, CONFIG_TELEGRAM_DEVICE, 
             msg_template, msg_object, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
         } else {
-          tgSend(msg_notify, CONFIG_TELEGRAM_DEVICE, 
+          tgSend(TG_SERVICE, msg_notify, CONFIG_TELEGRAM_DEVICE, 
             msg_template, s_time_unavailable, s_time_restore, loss_h, loss_m, loss_s);
         };
       };
@@ -601,7 +601,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
         statesSetErrors(ERR_OPENMON);
         if (statesInetIsAvailabled()) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
               CONFIG_TELEGRAM_DEVICE,
               CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, "open-monitoring.online");
           #endif // CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
@@ -625,7 +625,7 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
         statesSetErrors(ERR_THINGSPEAK);
         if (statesInetIsAvailabled()) {
           #if CONFIG_TELEGRAM_ENABLE & CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
               CONFIG_TELEGRAM_DEVICE,
               CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, "thingspeak.com");
           #endif // CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
@@ -668,7 +668,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       ledSysSetEnabled(false);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_ON");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
-        tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_ON);
+        tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_ON);
       #endif // CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
       break;
     // Silent mode off
@@ -677,7 +677,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       ledSysSetEnabled(true);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_OFF");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
-        tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_OFF);
+        tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_OFF);
       #endif // CONFIG_NOTIFY_TELEGRAM_SILENT_MODE
       break;
     #endif // CONFIG_SILENT_MODE_ENABLE
@@ -774,7 +774,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
             _isFirstConnect = false;
           } else {
             if (statesInetIsAvailabled()) {
-              tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+              tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
                 CONFIG_TELEGRAM_DEVICE, 
                 CONFIG_MESSAGE_TG_MQTT_CONN_OK, data->host, data->port);
             };
@@ -791,7 +791,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
           _isFirstConnect = false;
           if (statesInetIsAvailabled()) {
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
               CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_MQTT_CONN_LOST, data->host, data->port);
           };
@@ -807,7 +807,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
           _isFirstConnect = false;
           if (statesInetIsAvailabled()) {
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
               CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, data->host, data->port);
           };
@@ -820,7 +820,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_PRIMARY");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (statesInetIsAvailabled()) {
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_PRIMARY);
         };
@@ -832,7 +832,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_RESERVED");
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (statesInetIsAvailabled()) {
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_RESERVED);
         };
@@ -845,7 +845,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS
         if (event_data) {
           char* error = (char*)event_data;
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_MQTT_ERROR, error);
         };
@@ -917,7 +917,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
           if (data) {
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE,
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE,
               CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, data->host_name);
           };
@@ -932,7 +932,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
         if (statesInetIsAvailabled()) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
           if (data) {
-            tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
               CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, data->host_name);
           };
@@ -987,37 +987,37 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
       rSensor* sensor = (rSensor*)data->sensor;
       switch ((sensor_status_t)data->new_status) {
         case SENSOR_STATUS_NAN:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_NAN, sensor->getName());
           break;
         case SENSOR_STATUS_OK:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_OK, sensor->getName());
           break;
         case SENSOR_STATUS_TIMEOUT:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_TIMEOUT, sensor->getName());
           break;
         case SENSOR_STATUS_CAL_ERROR:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_CALIBRATION, sensor->getName());
           break;
         case SENSOR_STATUS_CRC_ERROR:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_CRC_ERROR, sensor->getName());
           break;
         case SENSOR_STATUS_ERROR:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_ERROR, sensor->getName());
           break;
         default:
-          tgSend(CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
             CONFIG_TELEGRAM_DEVICE, 
             CONFIG_MESSAGE_TG_SENSOR_STATE_UNKNOWN_ERROR, sensor->getName());
           break;
