@@ -941,27 +941,14 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
     case RE_PING_INET_SLOWDOWN:
       statesSet(INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
-      #if CONFIG_PINGER_SLOW_AS_UNAVAILABLE
-        statesClear(INET_AVAILABLED);
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1)
-          if (event_data) {
-            ping_inet_data_t* data = (ping_inet_data_t*)event_data;
-            statesNotifyInetUnavailable(true, data->time_unavailable);
-          } else {
-            statesNotifyInetUnavailable(true, time(nullptr));
-          };
-        #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
-        eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_FAILED, nullptr, 0, portMAX_DELAY);
-      #else
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1)
-          if (event_data) {
-            ping_inet_data_t* data = (ping_inet_data_t*)event_data;
-            notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable);
-          } else {
-            notifierInet.setState(FNS_SLOWDOWN, time(nullptr));
-          };
-        #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
-      #endif // CONFIG_PINGER_SLOW_AS_UNAVAILABLE
+      #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1)
+        if (event_data) {
+          ping_inet_data_t* data = (ping_inet_data_t*)event_data;
+          notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable);
+        } else {
+          notifierInet.setState(FNS_SLOWDOWN, time(nullptr));
+        };
+      #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
       break;
 
     case RE_PING_INET_UNAVAILABLE:
