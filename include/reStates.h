@@ -29,7 +29,7 @@ static const uint32_t WIFI_STA_STARTED     = BIT5;
 static const uint32_t WIFI_STA_CONNECTED   = BIT6;
 // static const uint32_t WIFI_STA_LOST        = BIT7;
 static const uint32_t INET_AVAILABLED      = BIT8;
-static const uint32_t INET_DELAYED         = BIT9;
+static const uint32_t INET_SLOWDOWN        = BIT9;
 
 // System flags
 static const uint32_t SYSTEM_OTA           = BIT12;

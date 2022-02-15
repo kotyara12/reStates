@@ -205,12 +205,12 @@ bool statesInetIsAvailabled()
 
 bool statesInetIsDelayed()
 {
-  return statesCheck(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_DELAYED, false);
+  return statesCheck(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN, false);
 }
 
 bool statesInetIsGood()
 {
-  return statesInetIsAvailabled() and !statesCheck(INET_DELAYED, false);
+  return statesInetIsAvailabled() and !statesCheck(INET_SLOWDOWN, false);
 }
 
 bool statesInetWait(TickType_t timeout)
@@ -621,11 +621,11 @@ static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert,
   static bool statesNotifySendInet(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
   {
     if (state == FNS_OK) {
-      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_AVAILABLE, object, state, time_failure, time_state);
+      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, state, time_failure, time_state);
     } else if (state == FNS_SLOWDOWN) {
-      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_SLOWDOWN, object, state, time_failure, time_state);
+      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_SLOWDOWN, nullptr, state, time_failure, time_state);
     } else {
-      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, object, state, time_failure, time_state);
+      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, nullptr, state, time_failure, time_state);
     };
   }
 
@@ -868,23 +868,23 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
 {
   switch (event_id) {
     case RE_WIFI_STA_INIT:
-      statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_DELAYED);
+      statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
       break;
 
     case RE_WIFI_STA_STARTED:
       statesSet(WIFI_STA_STARTED);
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_DELAYED);
+      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
       break;
 
     case RE_WIFI_STA_GOT_IP:
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
       #if CONFIG_PINGER_ENABLE
-        statesClear(INET_AVAILABLED | INET_DELAYED);
+        statesClear(INET_AVAILABLED | INET_SLOWDOWN);
       #else
         statesSet(WIFI_STA_CONNECTED | INET_AVAILABLED);
-        statesClear(INET_DELAYED);
+        statesClear(INET_SLOWDOWN);
         eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
         #if CONFIG_ENABLE_STATE_NOTIFICATIONS
           statesNotifyWiFiAvailable(true);
@@ -910,7 +910,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
           statesNotifyWiFiUnavailable(true);
         };
       #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_DELAYED);
+      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
       break;
 
@@ -928,7 +928,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
   switch (event_id) {
     case RE_PING_INET_AVAILABLE: 
       statesSet(INET_AVAILABLED);
-      statesClear(INET_DELAYED);
+      statesClear(INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_AVAILABLE");
       #if CONFIG_ENABLE_STATE_NOTIFICATIONS
         if (statesCheck(WIFI_STA_CONNECTED, false)) {
@@ -938,9 +938,9 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
       break;
 
-    case RE_PING_INET_DELAYED:
-      statesSet(INET_DELAYED);
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_DELAYED");
+    case RE_PING_INET_SLOWDOWN:
+      statesSet(INET_SLOWDOWN);
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
       #if CONFIG_PINGER_SLOW_AS_UNAVAILABLE
         statesClear(INET_AVAILABLED);
         #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1)
@@ -965,7 +965,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       break;
 
     case RE_PING_INET_UNAVAILABLE:
-      statesClear(INET_AVAILABLED | INET_DELAYED);
+      statesClear(INET_AVAILABLED | INET_SLOWDOWN);
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_FAILED, nullptr, 0, portMAX_DELAY);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_UNAVAILABLE");
       #if CONFIG_ENABLE_STATE_NOTIFICATIONS
