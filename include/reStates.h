@@ -18,10 +18,11 @@
 #include "project_config.h"
 #include "def_consts.h"
 
+static const uint32_t SYSTEM_STARTED       = BIT0;
 // Time
-static const uint32_t TIME_RTC_ENABLED     = BIT0;
-static const uint32_t TIME_SNTP_SYNC_OK    = BIT1;
-static const uint32_t TIME_SILENT_MODE     = BIT2;
+static const uint32_t TIME_RTC_ENABLED     = BIT1;
+static const uint32_t TIME_SNTP_SYNC_OK    = BIT2;
+static const uint32_t TIME_SILENT_MODE     = BIT3;
 static const uint32_t TIME_IS_OK           = TIME_RTC_ENABLED | TIME_SNTP_SYNC_OK;
 
 // WiFi

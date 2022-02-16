@@ -682,7 +682,7 @@ static void statesNotifyInetAvailable(bool setState)
 
   #if CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 0
     if (setState) {
-      notifierInet.setState(FNS_OK, time(nullptr));
+      notifierInet.setState(FNS_OK, time(nullptr), nullptr);
     };
   #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
 
@@ -709,7 +709,7 @@ static void statesNotifyInetUnavailable(bool setState, time_t timeState)
 
   #if CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 0
     if (setState) {
-      notifierInet.setState(FNS_FAILURE, timeState);
+      notifierInet.setState(FNS_FAILURE, timeState, nullptr);
     };
   #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
 
@@ -736,7 +736,7 @@ static void statesNotifyWiFiAvailable(bool setState)
 
   #if CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
     if (setState) {
-      notifierWifi.setState(FNS_OK, time(nullptr));
+      notifierWifi.setState(FNS_OK, time(nullptr), nullptr);
     };
   #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
 
@@ -753,7 +753,7 @@ static void statesNotifyWiFiUnavailable(bool setState)
 
   #if CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
     if (setState) {
-      notifierWifi.setState(FNS_FAILURE, time(nullptr));
+      notifierWifi.setState(FNS_FAILURE, time(nullptr), nullptr);
     };
   #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
 
@@ -769,6 +769,28 @@ static void statesNotifyWiFiUnavailable(bool setState)
 // -----------------------------------------------------------------------------------------------------------------------
 // --------------------------------------------------- Event handlers ----------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
+
+static void statesEventCheckSystemStarted()
+{
+  if (!statesCheck(SYSTEM_STARTED, false)) {
+    rlog_i(logTAG, "Check system started: wifi=%d, internet=%d, time=%d, mqtt=%d", 
+      statesCheck(WIFI_STA_CONNECTED, false), statesCheck(INET_AVAILABLED, false), 
+      (statesCheck(TIME_SNTP_SYNC_OK, false) || statesCheck(TIME_RTC_ENABLED, false)), 
+      statesCheck(MQTT_CONNECTED, false));
+
+    if ((statesCheck(TIME_SNTP_SYNC_OK, false) || statesCheck(TIME_RTC_ENABLED, false)) 
+     && statesCheck(WIFI_STA_CONNECTED, false) 
+     && statesCheck(INET_AVAILABLED, false) 
+     && statesCheck(MQTT_CONNECTED, false)) {
+       statesSet(SYSTEM_STARTED);
+       eventLoopPostSystem(RE_SYS_STARTED, RE_SYS_SET, false, 0);
+       #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+         tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION, 
+           APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
+       #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+    };
+  };
+}
 
 static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
@@ -793,12 +815,12 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
       if (data->type == RE_SYS_CLEAR) {
         statesClearErrors(ERR_OPENMON);
         #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS
-          notifierOpenMon.setState(FNS_OK, time(nullptr));
+          notifierOpenMon.setState(FNS_OK, time(nullptr), nullptr);
         #endif // CONFIG_OPENMON_ENABLE
       } else {
         statesSetErrors(ERR_OPENMON);
         #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS 
-          notifierOpenMon.setState(FNS_FAILURE, (time_t)data->data);
+          notifierOpenMon.setState(FNS_FAILURE, (time_t)data->data, nullptr);
         #endif // CONFIG_OPENMON_ENABLE
       };
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_OPENMON_ERROR", data->type);
@@ -808,12 +830,12 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
       if (data->type == RE_SYS_CLEAR) {
         statesClearErrors(ERR_THINGSPEAK);
         #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
-          notifierThingSpeak.setState(FNS_OK, time(nullptr));
+          notifierThingSpeak.setState(FNS_OK, time(nullptr), nullptr);
         #endif // CONFIG_THINGSPEAK_ENABLE
       } else {
         statesSetErrors(ERR_THINGSPEAK);
         #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS 
-          notifierThingSpeak.setState(FNS_FAILURE, (time_t)data->data);
+          notifierThingSpeak.setState(FNS_FAILURE, (time_t)data->data, nullptr);
         #endif // CONFIG_THINGSPEAK_ENABLE
       };
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_THINGSPEAK_ERROR", data->type);
@@ -827,12 +849,14 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
     // Received time from hardware real time clock
     case RE_TIME_RTC_ENABLED:
       statesSet(TIME_RTC_ENABLED);
+      statesEventCheckSystemStarted();
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_RTC_ENABLED");
       break;
 
     // Received time from NTP server
     case RE_TIME_SNTP_SYNC_OK:
       statesSet(TIME_SNTP_SYNC_OK);
+      statesEventCheckSystemStarted();
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "TIME_SNTP_SYNC_OK");
       break;
 
@@ -890,6 +914,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
           statesNotifyWiFiAvailable(true);
         #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
       #endif // CONFIG_PINGER_ENABLE
+      statesEventCheckSystemStarted();
       break;
 
     #if CONFIG_PINGER_ENABLE
@@ -900,6 +925,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
             statesNotifyWiFiAvailable(true);
           #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
         };
+        statesEventCheckSystemStarted();
         break;
     #endif // CONFIG_PINGER_ENABLE
 
@@ -936,19 +962,21 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
         };
       #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
+      statesEventCheckSystemStarted();
       break;
 
     case RE_PING_INET_SLOWDOWN:
-      statesSet(INET_SLOWDOWN);
+      statesSet(INET_AVAILABLED | INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
       #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1)
         if (event_data) {
           ping_inet_data_t* data = (ping_inet_data_t*)event_data;
-          notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable);
+          notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable, nullptr);
         } else {
-          notifierInet.setState(FNS_SLOWDOWN, time(nullptr));
+          notifierInet.setState(FNS_SLOWDOWN, time(nullptr), nullptr);
         };
       #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
+      statesEventCheckSystemStarted();
       break;
 
     case RE_PING_INET_UNAVAILABLE:
@@ -971,7 +999,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       statesSet(MQTT_1_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_AVAILABLE");
       #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
-        notifierMqttPing1.setState(FNS_OK, time(nullptr));
+        notifierMqttPing1.setState(FNS_OK, time(nullptr), nullptr);
       #endif // CONFIG_MQTT1_PING_CHECK
       break;
 
@@ -979,7 +1007,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       statesSet(MQTT_2_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_AVAILABLE");
       #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
-        notifierMqttPing2.setState(FNS_OK, time(nullptr));
+        notifierMqttPing2.setState(FNS_OK, time(nullptr), nullptr);
       #endif // CONFIG_MQTT2_PING_CHECK
       break;
 
@@ -989,9 +1017,9 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (event_data) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
-          notifierMqttPing1.setState(FNS_FAILURE, data->time_unavailable);
+          notifierMqttPing1.setState(FNS_FAILURE, data->time_unavailable, nullptr);
         } else {
-          notifierMqttPing1.setState(FNS_FAILURE, time(nullptr));
+          notifierMqttPing1.setState(FNS_FAILURE, time(nullptr), nullptr);
         };         
       #endif // CONFIG_MQTT1_PING_CHECK
       break;
@@ -1002,9 +1030,9 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         if (event_data) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
-          notifierMqttPing2.setState(FNS_FAILURE, data->time_unavailable);
+          notifierMqttPing2.setState(FNS_FAILURE, data->time_unavailable, nullptr);
         } else {
-          notifierMqttPing2.setState(FNS_FAILURE, time(nullptr));
+          notifierMqttPing2.setState(FNS_FAILURE, time(nullptr), nullptr);
         };         
       #endif // CONFIG_MQTT2_PING_CHECK
       break;
@@ -1030,6 +1058,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
           notifierMqtt.setState(FNS_OK, time(nullptr), malloc_stringf("%s:%d", data->host, data->port));
         #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
+        statesEventCheckSystemStarted();
       };
       break;
 
