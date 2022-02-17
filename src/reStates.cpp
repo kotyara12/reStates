@@ -1186,6 +1186,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
           notifierInet.setState(FNS_SLOWDOWN, time(nullptr), nullptr);
         };
       #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
+      eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
       statesEventCheckSystemStarted();
       break;
 
