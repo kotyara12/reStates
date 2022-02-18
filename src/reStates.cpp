@@ -15,13 +15,10 @@
 #endif // CONFIG_TELEGRAM_ENABLE
 #if CONFIG_TELEGRAM_ENABLE
   #define CONFIG_ENABLE_STATE_NOTIFICATIONS 1
+  #include "reNotifier.h"
 #else
   #define CONFIG_ENABLE_STATE_NOTIFICATIONS 0
 #endif // CONFIG_TELEGRAM_ENABLE
-#if CONFIG_ENABLE_STATE_NOTIFICATIONS
-#include "reNotifier.h"
-#endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
-
 
 static EventGroupHandle_t _evgStates = nullptr;
 static EventGroupHandle_t _evgErrors = nullptr;
@@ -529,27 +526,29 @@ void ledSysBlinkAuto()
   else if (errors & ERR_SENSORS) {
     ledSysBlinkOn(CONFIG_LEDSYS_SENSOR_ERROR_QUANTITY, CONFIG_LEDSYS_SENSOR_ERROR_DURATION, CONFIG_LEDSYS_SENSOR_ERROR_INTERVAL);
   }
-  else if (!(states & WIFI_STA_CONNECTED)) {
-    ledSysBlinkOn(CONFIG_LEDSYS_WIFI_INIT_QUANTITY, CONFIG_LEDSYS_WIFI_INIT_DURATION, CONFIG_LEDSYS_WIFI_INIT_INTERVAL);
-  }
-  else if (!(states & INET_AVAILABLED)) {
-    ledSysBlinkOn(CONFIG_LEDSYS_PING_FAILED_QUANTITY, CONFIG_LEDSYS_PING_FAILED_DURATION, CONFIG_LEDSYS_PING_FAILED_INTERVAL);
-  }
-  else if (!(states & TIME_IS_OK)) {
-    ledSysBlinkOn(CONFIG_LEDSYS_TIME_ERROR_QUANTITY, CONFIG_LEDSYS_TIME_ERROR_DURATION, CONFIG_LEDSYS_TIME_ERROR_INTERVAL);
-  }
-  else if (!(states & MQTT_CONNECTED) || (errors & ERR_MQTT)) {
-    ledSysBlinkOn(CONFIG_LEDSYS_MQTT_ERROR_QUANTITY, CONFIG_LEDSYS_MQTT_ERROR_DURATION, CONFIG_LEDSYS_MQTT_ERROR_INTERVAL);
-  }
-  else if (errors & ERR_PUBLISH) {
-    ledSysBlinkOn(CONFIG_LEDSYS_PUB_ERROR_QUANTITY, CONFIG_LEDSYS_PUB_ERROR_DURATION, CONFIG_LEDSYS_PUB_ERROR_INTERVAL);
-  }
-  else if (errors & ERR_TELEGRAM) {
-    ledSysBlinkOn(CONFIG_LEDSYS_TG_ERROR_QUANTITY, CONFIG_LEDSYS_TG_ERROR_DURATION, CONFIG_LEDSYS_TG_ERROR_INTERVAL);
-  }
-  else if (errors & ERR_SMTP) {
-    ledSysBlinkOn(CONFIG_LEDSYS_SMTP_ERROR_QUANTITY, CONFIG_LEDSYS_SMTP_ERROR_DURATION, CONFIG_LEDSYS_SMTP_ERROR_INTERVAL);
-  }
+  #if defined(CONFIG_OFFLINE_MODE) && CONFIG_OFFLINE_MODE
+    else if (!(states & WIFI_STA_CONNECTED)) {
+      ledSysBlinkOn(CONFIG_LEDSYS_WIFI_INIT_QUANTITY, CONFIG_LEDSYS_WIFI_INIT_DURATION, CONFIG_LEDSYS_WIFI_INIT_INTERVAL);
+    }
+    else if (!(states & INET_AVAILABLED)) {
+      ledSysBlinkOn(CONFIG_LEDSYS_PING_FAILED_QUANTITY, CONFIG_LEDSYS_PING_FAILED_DURATION, CONFIG_LEDSYS_PING_FAILED_INTERVAL);
+    }
+    else if (!(states & TIME_IS_OK)) {
+      ledSysBlinkOn(CONFIG_LEDSYS_TIME_ERROR_QUANTITY, CONFIG_LEDSYS_TIME_ERROR_DURATION, CONFIG_LEDSYS_TIME_ERROR_INTERVAL);
+    }
+    else if (!(states & MQTT_CONNECTED) || (errors & ERR_MQTT)) {
+      ledSysBlinkOn(CONFIG_LEDSYS_MQTT_ERROR_QUANTITY, CONFIG_LEDSYS_MQTT_ERROR_DURATION, CONFIG_LEDSYS_MQTT_ERROR_INTERVAL);
+    }
+    else if (errors & ERR_PUBLISH) {
+      ledSysBlinkOn(CONFIG_LEDSYS_PUB_ERROR_QUANTITY, CONFIG_LEDSYS_PUB_ERROR_DURATION, CONFIG_LEDSYS_PUB_ERROR_INTERVAL);
+    }
+    else if (errors & ERR_TELEGRAM) {
+      ledSysBlinkOn(CONFIG_LEDSYS_TG_ERROR_QUANTITY, CONFIG_LEDSYS_TG_ERROR_DURATION, CONFIG_LEDSYS_TG_ERROR_INTERVAL);
+    }
+    else if (errors & ERR_SMTP) {
+      ledSysBlinkOn(CONFIG_LEDSYS_SMTP_ERROR_QUANTITY, CONFIG_LEDSYS_SMTP_ERROR_DURATION, CONFIG_LEDSYS_SMTP_ERROR_INTERVAL);
+    }
+  #endif // CONFIG_OFFLINE_MODE
   else {
     ledSysBlinkOn(CONFIG_LEDSYS_NORMAL_QUANTITY, CONFIG_LEDSYS_NORMAL_DURATION, CONFIG_LEDSYS_NORMAL_INTERVAL);
   };
@@ -1175,19 +1174,23 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       statesEventCheckSystemStarted();
       break;
 
-    case RE_PING_INET_SLOWDOWN:
-      statesSet(INET_AVAILABLED | INET_SLOWDOWN);
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS && ((CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1) || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
-        if (event_data) {
-          ping_inet_data_t* data = (ping_inet_data_t*)event_data;
-          notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable, nullptr);
-        } else {
-          notifierInet.setState(FNS_SLOWDOWN, time(nullptr), nullptr);
+    case RE_PING_INET_SLOWDOWN: {
+        bool isSlowdown = statesCheck(INET_AVAILABLED, false);
+        statesSet(INET_AVAILABLED | INET_SLOWDOWN);
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
+        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && ((CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1) || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+          if (event_data) {
+            ping_inet_data_t* data = (ping_inet_data_t*)event_data;
+            notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable, nullptr);
+          } else {
+            notifierInet.setState(FNS_SLOWDOWN, time(nullptr), nullptr);
+          };
+        #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
+        if (!isSlowdown) {
+          eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
+          statesEventCheckSystemStarted();
         };
-      #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
-      eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
-      statesEventCheckSystemStarted();
+      };
       break;
 
     case RE_PING_INET_UNAVAILABLE:
