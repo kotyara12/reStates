@@ -1,6 +1,7 @@
 #include "time.h"
 #include "reStates.h"
 #include "reEvents.h"
+#include "reParams.h"
 #include "rStrings.h"
 #include "reEsp32.h"
 #include "esp_timer.h"
@@ -205,9 +206,11 @@ bool statesInetIsDelayed()
   return statesCheck(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN, false);
 }
 
-bool statesInetIsGood()
+bool statesInetIsGood(bool checkRssi)
 {
-  return statesInetIsAvailabled() and !statesCheck(INET_SLOWDOWN, false);
+  return statesInetIsAvailabled() 
+      && !statesCheck(INET_SLOWDOWN, false) 
+      && (!checkRssi || wifiRSSIIsOk());
 }
 
 bool statesInetWait(TickType_t timeout)
@@ -526,7 +529,7 @@ void ledSysBlinkAuto()
   else if (errors & ERR_SENSORS) {
     ledSysBlinkOn(CONFIG_LEDSYS_SENSOR_ERROR_QUANTITY, CONFIG_LEDSYS_SENSOR_ERROR_DURATION, CONFIG_LEDSYS_SENSOR_ERROR_INTERVAL);
   }
-  #if defined(CONFIG_OFFLINE_MODE) && CONFIG_OFFLINE_MODE
+  #if !defined(CONFIG_OFFLINE_MODE) || (CONFIG_OFFLINE_MODE == 0)
     else if (!(states & WIFI_STA_CONNECTED)) {
       ledSysBlinkOn(CONFIG_LEDSYS_WIFI_INIT_QUANTITY, CONFIG_LEDSYS_WIFI_INIT_DURATION, CONFIG_LEDSYS_WIFI_INIT_INTERVAL);
     }
@@ -547,6 +550,10 @@ void ledSysBlinkAuto()
     }
     else if (errors & ERR_SMTP) {
       ledSysBlinkOn(CONFIG_LEDSYS_SMTP_ERROR_QUANTITY, CONFIG_LEDSYS_SMTP_ERROR_DURATION, CONFIG_LEDSYS_SMTP_ERROR_INTERVAL);
+    }
+  #else
+    else if (!(states & TIME_IS_OK)) {
+      ledSysBlinkOn(CONFIG_LEDSYS_TIME_ERROR_QUANTITY, CONFIG_LEDSYS_TIME_ERROR_DURATION, CONFIG_LEDSYS_TIME_ERROR_INTERVAL);
     }
   #endif // CONFIG_OFFLINE_MODE
   else {

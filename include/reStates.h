@@ -90,7 +90,7 @@ bool statesWiFiWait(TickType_t timeout);
 bool statesWiFiWaitMs(TickType_t timeout);
 bool statesInetIsAvailabled();
 bool statesInetIsDelayed();
-bool statesInetIsGood();
+bool statesInetIsGood(bool checkRssi);
 bool statesInetWait(TickType_t timeout);
 bool statesInetWaitMs(TickType_t timeout);
 
