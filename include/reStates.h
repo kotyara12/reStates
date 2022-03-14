@@ -28,9 +28,8 @@ static const uint32_t TIME_IS_OK           = TIME_RTC_ENABLED | TIME_SNTP_SYNC_O
 // WiFi
 static const uint32_t WIFI_STA_STARTED     = BIT5;
 static const uint32_t WIFI_STA_CONNECTED   = BIT6;
-// static const uint32_t WIFI_STA_LOST        = BIT7;
-static const uint32_t INET_AVAILABLED      = BIT8;
-static const uint32_t INET_SLOWDOWN        = BIT9;
+static const uint32_t INET_AVAILABLED      = BIT7;
+static const uint32_t INET_SLOWDOWN        = BIT8;
 
 // System flags
 static const uint32_t SYSTEM_OTA           = BIT12;

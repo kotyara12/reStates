@@ -11,14 +11,18 @@
 #include "reNvs.h"
 #include "project_config.h"
 #include "def_consts.h"
+#if CONFIG_HEAP_TRACING_STANDALONE
+#include "esp_heap_trace.h"
+#include "reMqtt.h"
+#endif // CONFIG_HEAP_TRACING_STANDALONE
 #if CONFIG_TELEGRAM_ENABLE
 #include "reTgSend.h"
 #endif // CONFIG_TELEGRAM_ENABLE
-#if CONFIG_TELEGRAM_ENABLE
-  #define CONFIG_ENABLE_STATE_NOTIFICATIONS 1
+#if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_GLOBAL
+  #define CONFIG_ENABLE_STATES_NOTIFICATIONS 1
   #include "reNotifier.h"
 #else
-  #define CONFIG_ENABLE_STATE_NOTIFICATIONS 0
+  #define CONFIG_ENABLE_STATES_NOTIFICATIONS 0
 #endif // CONFIG_TELEGRAM_ENABLE
 
 static EventGroupHandle_t _evgStates = nullptr;
@@ -403,6 +407,11 @@ char* statesGetErrorsJson()
 // ------------------------------------------- Fixing memory allocation errors -------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
+#if CONFIG_HEAP_TRACING_STANDALONE
+  #define HEAP_TRACING_NUM_RECORDS 256
+  static heap_trace_record_t trace_record[HEAP_TRACING_NUM_RECORDS];
+#endif // CONFIG_HEAP_TRACING_STANDALONE
+
 static uint32_t heapFailsCount = 0;
 
 void heapAllocFailedHook(size_t requested_size, uint32_t caps, const char *function_name)
@@ -427,7 +436,72 @@ void heapAllocFailedInit()
 {
   heap_caps_register_failed_alloc_callback(heapAllocFailedHook);
   heapFailsCount = 0;
+
+  #if CONFIG_HEAP_TRACING_STANDALONE
+    heap_trace_init_standalone(trace_record, HEAP_TRACING_NUM_RECORDS);
+    heap_trace_start(HEAP_TRACE_LEAKS);
+  #endif // CONFIG_HEAP_TRACING_STANDALONE
 }
+
+#if CONFIG_HEAP_TRACING_STANDALONE
+char* heapLeaksJson()
+{
+  char* json = nullptr;
+  char* item = nullptr;
+  char* temp = nullptr;
+
+  for (int i = 0; i < HEAP_TRACING_NUM_RECORDS; i++) {
+    heap_trace_record_t rec;
+    if (heap_trace_get(i, &rec) == ESP_OK) {
+      if (rec.address != NULL) {
+        char* stack = nullptr;
+        #if CONFIG_HEAP_TRACING_STACK_DEPTH == 0
+          stack = malloc_string("");
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 1
+          stack = malloc_stringf("%p", rec.alloced_by[0]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 2
+          stack = malloc_stringf("%p,%p", rec.alloced_by[0], rec.alloced_by[1]);
+        #else
+          stack = malloc_stringf("%p,%p,%p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[3]);
+        #endif // #elif CONFIG_HEAP_TRACING_STACK_DEPTH
+
+        if (stack) {
+          char* item = malloc_stringf("{\"address\":%p,\"length\":%d,\"cpu\":%d,\"ccount\":0x%08x,\"stack\":[%s]}", 
+            rec.address, rec.size, rec.ccount & 1, rec.ccount & ~3, stack);
+          free(stack);
+        };
+      };
+      if (item) {
+        if (json) {
+          temp = json;
+          json = malloc_stringf("%s,%s", temp, item);
+          free(temp);
+          free(item);
+        } else {
+          json = item;
+        };
+      };
+    }
+    };
+  if (json) {
+    temp = json;
+    json = malloc_stringf("[%s]", temp);
+    free(temp);
+  };
+  return json;
+}
+
+void heapLeaksPublish()
+{
+  if (statesMqttIsEnabled()) {
+    mqttPublish(
+      mqttGetTopicDevice1(statesMqttIsPrimary(), CONFIG_MQTT_HEAP_LEAKS_LOCAL, CONFIG_MQTT_HEAP_LEAKS_TOPIC),
+      heapLeaksJson(), 
+      CONFIG_MQTT_HEAP_LEAKS_QOS, CONFIG_MQTT_HEAP_LEAKS_RETAINED, true, true, true);
+  };
+};
+
+#endif // CONFIG_HEAP_TRACING_STANDALONE
 
 void heapCapsDebug(const char *function_name)
 {
@@ -565,9 +639,9 @@ void ledSysBlinkAuto()
 // ------------------------------------------------- Event notifications -------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
-#if CONFIG_ENABLE_STATE_NOTIFICATIONS
+#if CONFIG_ENABLE_STATES_NOTIFICATIONS
 
-static time_t _statesNotifyDelayFailure = CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME;
+static uint32_t _statesNotifyDelayFailure = CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME;
 
 static bool statesNotifySend(bool alert, const char* message, const char* object, notify_state_t state, time_t time_failure, time_t time_state)
 {
@@ -968,7 +1042,7 @@ static void statesNotifyWiFiUnavailable(bool setState)
   }
 #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 
-#endif // CONFIG_ENABLE_STATE_NOTIFICATIONS 
+#endif // CONFIG_ENABLE_STATES_NOTIFICATIONS 
 
 // -----------------------------------------------------------------------------------------------------------------------
 // --------------------------------------------------- Event handlers ----------------------------------------------------
@@ -988,10 +1062,10 @@ static void statesEventCheckSystemStarted()
      && statesCheck(MQTT_CONNECTED, false)) {
        statesSet(SYSTEM_STARTED);
        eventLoopPostSystem(RE_SYS_STARTED, RE_SYS_SET, false, 0);
-       #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+       #if CONFIG_TELEGRAM_ENABLE
          tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION, 
            APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
-       #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+       #endif // CONFIG_TELEGRAM_ENABLE
     };
   };
 }
@@ -1018,12 +1092,12 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
     else if (event_id == RE_SYS_OPENMON_ERROR) {
       if (data->type == RE_SYS_CLEAR) {
         statesClearErrors(ERR_OPENMON);
-        #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierOpenMon.setState(FNS_OK, time(nullptr), nullptr);
         #endif // CONFIG_OPENMON_ENABLE
       } else {
         statesSetErrors(ERR_OPENMON);
-        #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_OPENMON_ENABLE && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierOpenMon.setState(FNS_FAILURE, (time_t)data->data, nullptr);
         #endif // CONFIG_OPENMON_ENABLE
       };
@@ -1033,12 +1107,12 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
     else if (event_id == RE_SYS_THINGSPEAK_ERROR) {
       if (data->type == RE_SYS_CLEAR) {
         statesClearErrors(ERR_THINGSPEAK);
-        #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierThingSpeak.setState(FNS_OK, time(nullptr), nullptr);
         #endif // CONFIG_THINGSPEAK_ENABLE
       } else {
         statesSetErrors(ERR_THINGSPEAK);
-        #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_THINGSPEAK_ENABLE && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierThingSpeak.setState(FNS_FAILURE, (time_t)data->data, nullptr);
         #endif // CONFIG_THINGSPEAK_ENABLE
       };
@@ -1057,6 +1131,12 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_RTC_ENABLED");
       break;
 
+    #if CONFIG_HEAP_TRACING_STANDALONE
+    case RE_TIME_START_OF_HOUR:
+      heapLeaksPublish();
+      break;
+    #endif // CONFIG_HEAP_TRACING_STANDALONE  
+
     // Received time from NTP server
     case RE_TIME_SNTP_SYNC_OK:
       statesSet(TIME_SNTP_SYNC_OK);
@@ -1070,7 +1150,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       statesSet(TIME_SILENT_MODE);
       ledSysSetEnabled(false);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_ON");
-      #if CONFIG_TELEGRAM_ENABLE && (CONFIG_NOTIFY_TELEGRAM_SILENT_MODE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_SILENT_MODE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         if (_notifyTgSilentMode) {
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1085,7 +1165,7 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       statesClear(TIME_SILENT_MODE);
       ledSysSetEnabled(true);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_SILENT_MODE_OFF");
-      #if CONFIG_TELEGRAM_ENABLE && (CONFIG_NOTIFY_TELEGRAM_SILENT_MODE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_SILENT_MODE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         if (_notifyTgSilentMode) {
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1108,27 +1188,27 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
 {
   switch (event_id) {
     case RE_WIFI_STA_INIT:
-      statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
+      statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
       break;
 
     case RE_WIFI_STA_STARTED:
       statesSet(WIFI_STA_STARTED);
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
+      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
       break;
 
     case RE_WIFI_STA_GOT_IP:
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
       #if CONFIG_PINGER_ENABLE
-        statesClear(INET_AVAILABLED | INET_SLOWDOWN);
+        statesClear(INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       #else
         statesSet(WIFI_STA_CONNECTED | INET_AVAILABLED);
-        statesClear(INET_SLOWDOWN);
+        statesClear(INET_SLOWDOWN | MQTT_CONNECTED);
         eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS
           statesNotifyWiFiAvailable(true);
-        #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+        #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       #endif // CONFIG_PINGER_ENABLE
       statesEventCheckSystemStarted();
       break;
@@ -1137,9 +1217,9 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
       case RE_WIFI_STA_PING_OK:
         if (!statesCheck(WIFI_STA_CONNECTED, false)) {
           statesSet(WIFI_STA_CONNECTED);
-          #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+          #if CONFIG_ENABLE_STATES_NOTIFICATIONS
             statesNotifyWiFiAvailable(true);
-          #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+          #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
         };
         statesEventCheckSystemStarted();
         break;
@@ -1147,12 +1227,12 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
 
     case RE_WIFI_STA_DISCONNECTED:
     case RE_WIFI_STA_STOPPED:
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS 
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS 
         if (statesCheck(WIFI_STA_CONNECTED, false)) {
           statesNotifyWiFiUnavailable(true);
         };
-      #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN);
+      #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
       break;
 
@@ -1172,11 +1252,11 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       statesSet(INET_AVAILABLED);
       statesClear(INET_SLOWDOWN);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_AVAILABLE");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS
         if (statesCheck(WIFI_STA_CONNECTED, false)) {
           statesNotifyInetAvailable(true);
         };
-      #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+      #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
       statesEventCheckSystemStarted();
       break;
@@ -1185,7 +1265,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
         bool isSlowdown = statesCheck(INET_AVAILABLED, false);
         statesSet(INET_AVAILABLED | INET_SLOWDOWN);
         // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_SLOWDOWN");
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && ((CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1) || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS && ((CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 1) || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           if (event_data) {
             ping_inet_data_t* data = (ping_inet_data_t*)event_data;
             notifierInet.setState(FNS_SLOWDOWN, data->time_unavailable, nullptr);
@@ -1204,7 +1284,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       statesClear(INET_AVAILABLED | INET_SLOWDOWN);
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_FAILED, nullptr, 0, portMAX_DELAY);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_UNAVAILABLE");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS
         if (statesCheck(WIFI_STA_CONNECTED, false)) {
           if (event_data) {
             ping_inet_data_t* data = (ping_inet_data_t*)event_data;
@@ -1213,13 +1293,13 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
             statesNotifyInetUnavailable(true, time(nullptr));
           };
         };
-      #endif // CONFIG_ENABLE_STATE_NOTIFICATIONS
+      #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       break;
 
     case RE_PING_MQTT1_AVAILABLE:
       statesSet(MQTT_1_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_AVAILABLE");
-      #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         notifierMqttPing1.setState(FNS_OK, time(nullptr), nullptr);
       #endif // CONFIG_MQTT1_PING_CHECK
       break;
@@ -1227,7 +1307,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
     case RE_PING_MQTT2_AVAILABLE:
       statesSet(MQTT_2_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_AVAILABLE");
-      #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         notifierMqttPing2.setState(FNS_OK, time(nullptr), nullptr);
       #endif // CONFIG_MQTT2_PING_CHECK
       break;
@@ -1235,7 +1315,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
     case RE_PING_MQTT1_UNAVAILABLE:
       statesClear(MQTT_1_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT1_UNAVAILABLE");
-      #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_MQTT1_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         if (event_data) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
           notifierMqttPing1.setState(FNS_FAILURE, data->time_unavailable, nullptr);
@@ -1248,7 +1328,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
     case RE_PING_MQTT2_UNAVAILABLE:
       statesClear(MQTT_2_ENABLED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_MQTT2_UNAVAILABLE");
-      #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATE_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_MQTT2_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         if (event_data) {
           ping_host_data_t* data = (ping_host_data_t*)event_data;
           notifierMqttPing2.setState(FNS_FAILURE, data->time_unavailable, nullptr);
@@ -1276,7 +1356,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         statesSetBit(MQTT_PRIMARY, data->primary);
         statesSetBit(MQTT_LOCAL, data->local);
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierMqtt.setState(FNS_OK, time(nullptr), malloc_stringf("%s:%d", data->host, data->port));
         #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
         statesEventCheckSystemStarted();
@@ -1288,7 +1368,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_LOST");
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
           notifierMqtt.setState(FNS_FAILURE, time(nullptr), malloc_stringf("%s:%d", data->host, data->port));
         #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       };
@@ -1299,24 +1379,22 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_FAILED");
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
-        #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
-          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 1, nullptr);
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 1, malloc_stringf("%s:%d", data->host, data->port));
         #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       };
       break;
 
     case RE_MQTT_SERVER_PRIMARY:
-      // statesSet(MQTT_PRIMARY);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_PRIMARY");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 2, nullptr);
       #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       break;
 
     case RE_MQTT_SERVER_RESERVED:
-      // statesClear(MQTT_PRIMARY);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_RESERVED");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 3, nullptr);
       #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       break;
@@ -1324,7 +1402,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
     case RE_MQTT_ERROR:
       statesSetErrors(ERR_MQTT);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_ERROR");
-      #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         if (_notifyTgMqttErrors) {
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1386,7 +1464,7 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
         break;
     };
 
-    #if CONFIG_ENABLE_STATE_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+    #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
       // Sensor status change notification
       #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
       if (_notifyTgSensors) {
@@ -1447,7 +1525,7 @@ bool statesEventHandlerRegister()
           #endif // CONFIG_PINGER_ENABLE
           && eventHandlerRegister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor, nullptr);
   if (ret) {
-    #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
+    #if CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
       statesNotifyRegisterParameters();
     #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     rlog_d(logTAG, "System states event handlers registered");
