@@ -407,24 +407,23 @@ char* statesGetErrorsJson()
 // ------------------------------------------- Fixing memory allocation errors -------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
-#if CONFIG_HEAP_TRACING_STANDALONE
-  #define HEAP_TRACING_NUM_RECORDS 256
-  static heap_trace_record_t trace_record[HEAP_TRACING_NUM_RECORDS];
-#endif // CONFIG_HEAP_TRACING_STANDALONE
-
 static uint32_t heapFailsCount = 0;
 
 void heapAllocFailedHook(size_t requested_size, uint32_t caps, const char *function_name)
 {
   rlog_e("HEAP", "%s was called but failed to allocate %d bytes with 0x%X capabilities.", function_name, requested_size, caps);
-  heapFailsCount++;
-  #if CONFIG_HEAP_ALLOC_FAILED_RESTART
-    #if defined(CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY) && (CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY > 0) 
-      espRestart(RR_HEAP_ALLOCATION_FAILED, CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY); 
-    #else
-      espRestart(RR_HEAP_ALLOCATION_FAILED, 0); 
-    #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART_WAIT
-  #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART
+  #if CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS
+    espSetResetReason(RR_HEAP_ALLOCATION_FAILED);
+  #else
+    heapFailsCount++;
+    #if CONFIG_HEAP_ALLOC_FAILED_RESTART
+      #if defined(CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY) && (CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY > 0) 
+        espRestart(RR_HEAP_ALLOCATION_FAILED, CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY); 
+      #else
+        espRestart(RR_HEAP_ALLOCATION_FAILED, 0); 
+      #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART_WAIT
+    #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART
+  #endif // CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS
 }
 
 uint32_t heapAllocFailedCount() 
@@ -436,68 +435,179 @@ void heapAllocFailedInit()
 {
   heap_caps_register_failed_alloc_callback(heapAllocFailedHook);
   heapFailsCount = 0;
-
-  #if CONFIG_HEAP_TRACING_STANDALONE
-    heap_trace_init_standalone(trace_record, HEAP_TRACING_NUM_RECORDS);
-    heap_trace_start(HEAP_TRACE_LEAKS);
-  #endif // CONFIG_HEAP_TRACING_STANDALONE
 }
 
 #if CONFIG_HEAP_TRACING_STANDALONE
+
+#define CONFIG_HEAP_TRACING_NUM_RECORDS 256
+#define CONFIG_HEAP_LEAKS_NUM_RECORDS 256
+#define CONFIG_HEAP_LEAKS_MIN_SIZE 1
+#define CONFIG_HEAP_LEAKS_MIN_REPEATS 3
+
+typedef struct {
+  uint32_t ccount;
+  void *address;
+  size_t size;
+  void *alloced_by[CONFIG_HEAP_TRACING_STACK_DEPTH];
+  uint8_t confirm;
+  uint32_t repeats;
+  time_t timestamp;
+} heap_leak_record_t;
+
+static uint8_t leak_count = 0;
+static heap_leak_record_t leaks_buffer[CONFIG_HEAP_LEAKS_NUM_RECORDS];
+static heap_trace_record_t trace_buffer[CONFIG_HEAP_TRACING_NUM_RECORDS];
+
+void heapLeaksStart()
+{
+  memset(&leaks_buffer, 0, sizeof(leaks_buffer));
+  heap_trace_init_standalone(trace_buffer, CONFIG_HEAP_TRACING_NUM_RECORDS);
+  heap_trace_start(HEAP_TRACE_LEAKS);
+}
+
+void heapLeaksStop()
+{
+  heap_trace_stop();
+}
+
+void heapLeaksScan()
+{
+  // Mark all current entries as lost
+  for (uint16_t i = 0; i < CONFIG_HEAP_LEAKS_NUM_RECORDS; i++) {
+    leaks_buffer[i].confirm = 0;
+  };
+
+  // Search for new leaks and comparison with current data
+  heap_trace_record_t rec;
+  for (uint16_t j = 0; j < CONFIG_HEAP_TRACING_NUM_RECORDS; j++) {
+    if ((heap_trace_get(j, &rec) == ESP_OK) && (rec.address != NULL) && (rec.freed_by[0] == NULL) && (rec.size >= CONFIG_HEAP_LEAKS_MIN_SIZE) && ((rec.ccount & 1) > 0)) {
+      // We are looking for this entry in the main list
+      int16_t found = -1;
+      for (uint16_t i = 0; i < CONFIG_HEAP_LEAKS_NUM_RECORDS; i++) {
+        if ((leaks_buffer[i].address == rec.address) && (leaks_buffer[i].size == rec.size) && (leaks_buffer[i].ccount == rec.ccount)) {
+          found = i;
+          leaks_buffer[i].confirm = 1;
+          leaks_buffer[i].repeats++;
+          break;
+        };
+      };
+      // Entry not found, fill first free entry in buffer
+      if (found == -1) {
+        for (uint16_t i = 0; i < CONFIG_HEAP_LEAKS_NUM_RECORDS; i++) {
+          if ((leaks_buffer[i].address == NULL) || (leaks_buffer[i].size == 0)) {
+            leaks_buffer[i].ccount = rec.ccount;
+            leaks_buffer[i].address = rec.address;
+            leaks_buffer[i].size = rec.size;
+            #if CONFIG_HEAP_TRACING_STACK_DEPTH > 0
+              memcpy(&leaks_buffer[i].alloced_by, &rec.alloced_by, sizeof(void*)*CONFIG_HEAP_TRACING_STACK_DEPTH);
+            #endif // CONFIG_HEAP_TRACING_STACK_DEPTH
+            leaks_buffer[i].confirm = 1;
+            leaks_buffer[i].repeats = 1;
+            leaks_buffer[i].timestamp = time(nullptr);
+            break;
+          };
+        };
+      };
+    };
+  };
+
+  // Mark as free all records that have not been committed in this session
+  leak_count = 0;
+  for (uint16_t i = 0; i < CONFIG_HEAP_LEAKS_NUM_RECORDS; i++) {
+    if ((leaks_buffer[i].confirm == 0) && (leaks_buffer[i].address != NULL)) {
+      memset(&leaks_buffer[i], 0, sizeof(heap_leak_record_t));
+    } else {
+      leak_count++;
+    };
+  };
+}
+
 char* heapLeaksJson()
 {
+  uint16_t count = 0;
   char* json = nullptr;
-  char* item = nullptr;
-  char* temp = nullptr;
 
-  for (int i = 0; i < HEAP_TRACING_NUM_RECORDS; i++) {
-    heap_trace_record_t rec;
-    if (heap_trace_get(i, &rec) == ESP_OK) {
-      if (rec.address != NULL) {
+  if (leak_count > 0) {
+    char* item = nullptr;
+    char* temp = nullptr;
+
+    heap_leak_record_t rec;
+    for (uint16_t i = 0; i < CONFIG_HEAP_LEAKS_NUM_RECORDS; i++) {
+      if ((leaks_buffer[i].address != NULL) && (leaks_buffer[i].size > 0) && (leaks_buffer[i].confirm > 0) && (leaks_buffer[i].repeats > CONFIG_HEAP_LEAKS_MIN_REPEATS)) {
+        count++;
+        memcpy(&rec, &leaks_buffer[i], sizeof(heap_leak_record_t));
+
+        // Create item JSON
         char* stack = nullptr;
         #if CONFIG_HEAP_TRACING_STACK_DEPTH == 0
           stack = malloc_string("");
         #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 1
           stack = malloc_stringf("%p", rec.alloced_by[0]);
         #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 2
-          stack = malloc_stringf("%p,%p", rec.alloced_by[0], rec.alloced_by[1]);
-        #else
-          stack = malloc_stringf("%p,%p,%p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[3]);
+          stack = malloc_stringf("%p %p", rec.alloced_by[0], rec.alloced_by[1]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 3
+          stack = malloc_stringf("%p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 4
+          stack = malloc_stringf("%p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 5
+          stack = malloc_stringf("%p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 6
+          stack = malloc_stringf("%p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 7
+          stack = malloc_stringf("%p %p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5], rec.alloced_by[6]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 8
+          stack = malloc_stringf("%p %p %p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5], rec.alloced_by[6], rec.alloced_by[7]);
+        #elif CONFIG_HEAP_TRACING_STACK_DEPTH == 9
+          stack = malloc_stringf("%p %p %p %p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5], rec.alloced_by[6], rec.alloced_by[7], rec.alloced_by[8]);
+        #else 
+          stack = malloc_stringf("%p %p %p %p %p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5], rec.alloced_by[6], rec.alloced_by[7], rec.alloced_by[8], rec.alloced_by[9]);
         #endif // #elif CONFIG_HEAP_TRACING_STACK_DEPTH
 
-        if (stack) {
-          char* item = malloc_stringf("{\"address\":%p,\"length\":%d,\"cpu\":%d,\"ccount\":0x%08x,\"stack\":[%s]}", 
-            rec.address, rec.size, rec.ccount & 1, rec.ccount & ~3, stack);
-          free(stack);
+        char* timest = malloc_timestr_empty(CONFIG_FORMAT_DTS, rec.timestamp);
+
+        if ((stack) && (timest)) {
+          item = malloc_stringf("{\"timestamp\":\"%s\",\"repeats\":%d,\"address\":\"%p\",\"size\":%d,\"cpu\":%d,\"ccount\":\"0x%08x\",\"stack\":\"%s\"}", 
+            timest, rec.repeats, rec.address, rec.size, rec.ccount & 1, rec.ccount & ~3, stack);
+        };
+
+        if (timest) free(timest);
+        if (stack) free(stack);
+
+        // Add item to JSON array
+        if (item) {
+          if (json) {
+            temp = json;
+            json = malloc_stringf("%s,%s", temp, item);
+            free(temp);
+            free(item);
+            item = nullptr;
+          } else {
+            json = item;
+            item = nullptr;
+          };
         };
       };
-      if (item) {
-        if (json) {
-          temp = json;
-          json = malloc_stringf("%s,%s", temp, item);
-          free(temp);
-          free(item);
-        } else {
-          json = item;
-        };
-      };
-    }
     };
-  if (json) {
-    temp = json;
-    json = malloc_stringf("[%s]", temp);
-    free(temp);
   };
+
+  // Add brackets
+  if (json) {
+    char* buf = json;
+    json = malloc_stringf("{\"total\":%d,\"details\":[%s]}", count, buf);
+    free(buf);
+  };
+
   return json;
 }
 
-void heapLeaksPublish()
+void heapLeaksUpdate()
 {
+  heapLeaksScan();
   if (statesMqttIsEnabled()) {
+    char* json = heapLeaksJson();
     mqttPublish(
-      mqttGetTopicDevice1(statesMqttIsPrimary(), CONFIG_MQTT_HEAP_LEAKS_LOCAL, CONFIG_MQTT_HEAP_LEAKS_TOPIC),
-      heapLeaksJson(), 
-      CONFIG_MQTT_HEAP_LEAKS_QOS, CONFIG_MQTT_HEAP_LEAKS_RETAINED, true, true, true);
+      mqttGetTopicDevice1(statesMqttIsPrimary(), CONFIG_MQTT_HEAP_LEAKS_LOCAL, CONFIG_MQTT_HEAP_LEAKS_TOPIC), 
+      json, CONFIG_MQTT_HEAP_LEAKS_QOS, CONFIG_MQTT_HEAP_LEAKS_RETAINED, true, true, true);
   };
 };
 
@@ -1048,6 +1158,56 @@ static void statesNotifyWiFiUnavailable(bool setState)
 // --------------------------------------------------- Event handlers ----------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
+#if CONFIG_RESTART_DEBUG_INFO
+
+static char* statesGetDebugHeap(re_restart_debug_t *debug)
+{
+  if (debug->heap_total > 0) {
+    struct tm timeinfo;
+    localtime_r(&debug->heap_min_time, &timeinfo);
+    char time_buffer[CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE];
+    memset(&time_buffer, 0, CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE);
+    strftime(time_buffer, CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE, CONFIG_FORMAT_DTS, &timeinfo);
+
+    return malloc_stringf("%d : %d (%.1f%%) : %d (%.1f%%) %s", 
+      debug->heap_total,
+      debug->heap_free, 100.0 * debug->heap_free / debug->heap_total,
+      debug->heap_free_min, 100.0 * debug->heap_free_min / debug->heap_total, time_buffer);
+  };
+  return nullptr;
+}
+
+#if CONFIG_RESTART_DEBUG_STACK_DEPTH > 0
+
+static char* statesGetDebugTrace(re_restart_debug_t *debug)
+{
+  char* backtrace = nullptr;
+  char* item = nullptr;
+  char* temp = nullptr;
+  for (uint8_t i = 0; i < CONFIG_RESTART_DEBUG_STACK_DEPTH; i++) {
+    if (debug->backtrace[i] != 0) {
+      item = malloc_stringf("0x%08x", debug->backtrace[i]);
+      if (item) {
+        if (backtrace) {
+          temp = backtrace;
+          backtrace = malloc_stringf("%s %s", temp, item);
+          free(item);
+          free(temp);
+        } else {
+          backtrace = item;
+        };
+        item = nullptr;
+      };
+    } else {
+      break;
+    }
+  };
+  return backtrace;
+}
+
+#endif // CONFIG_RESTART_DEBUG_STACK_DEPTH
+#endif // CONFIG_RESTART_DEBUG_INFO
+
 static void statesEventCheckSystemStarted()
 {
   if (!statesCheck(SYSTEM_STARTED, false)) {
@@ -1060,12 +1220,37 @@ static void statesEventCheckSystemStarted()
      && statesCheck(WIFI_STA_CONNECTED, false) 
      && statesCheck(INET_AVAILABLED, false) 
      && statesCheck(MQTT_CONNECTED, false)) {
-       statesSet(SYSTEM_STARTED);
-       eventLoopPostSystem(RE_SYS_STARTED, RE_SYS_SET, false, 0);
-       #if CONFIG_TELEGRAM_ENABLE
-         tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION, 
-           APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
-       #endif // CONFIG_TELEGRAM_ENABLE
+      statesSet(SYSTEM_STARTED);
+      eventLoopPostSystem(RE_SYS_STARTED, RE_SYS_SET, false, 0);
+      #if CONFIG_TELEGRAM_ENABLE
+        #if CONFIG_RESTART_DEBUG_INFO
+          re_restart_debug_t debug = debugGet();
+          char* debug_heap = statesGetDebugHeap(&debug);
+          char* debug_trace = nullptr;
+          if (debug_heap) {
+            #if CONFIG_RESTART_DEBUG_STACK_DEPTH > 0
+              debug_trace = statesGetDebugTrace(&debug);
+            #endif // CONFIG_RESTART_DEBUG_STACK_DEPTH
+            if (debug_trace) {
+              tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_TRACE, 
+                APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
+                debug_heap, debug_trace);
+              free(debug_trace);
+            } else {
+              tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_HEAP, 
+                APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
+                debug_heap);
+            };
+            free(debug_heap);
+          } else {
+            tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_DEF, 
+              APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
+          };
+        #else
+          tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_DEF, 
+            APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
+        #endif // CONFIG_RESTART_DEBUG_INFO
+      #endif // CONFIG_TELEGRAM_ENABLE
     };
   };
 }
@@ -1074,8 +1259,14 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
 {
   re_system_event_data_t* data = (re_system_event_data_t*)event_data;
   if (data) {
+    // System started
+    if (event_id == RE_SYS_STARTED) {
+      #if CONFIG_HEAP_TRACING_STANDALONE
+        heapLeaksStart();
+      #endif // CONFIG_HEAP_TRACING_STANDALONE  
+    }
     // OTA
-    if (event_id == RE_SYS_OTA) {
+    else if (event_id == RE_SYS_OTA) {
       statesSetBit(SYSTEM_OTA, data->type != RE_SYS_CLEAR);
     }
     // Error
@@ -1131,11 +1322,14 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_TIME_RTC_ENABLED");
       break;
 
-    #if CONFIG_HEAP_TRACING_STANDALONE
-    case RE_TIME_START_OF_HOUR:
-      heapLeaksPublish();
+    case RE_TIME_EVERY_MINUTE:
+      #if CONFIG_RESTART_DEBUG_INFO && CONFIG_RESTART_DEBUG_HEAP_SIZE_SCHEDULE
+        debugHeapUpdate();
+      #endif // CONFIG_RESTART_DEBUG_HEAP_SIZE_SCHEDULE
+      #if CONFIG_HEAP_TRACING_STANDALONE
+        heapLeaksUpdate();
+      #endif // CONFIG_HEAP_TRACING_STANDALONE  
       break;
-    #endif // CONFIG_HEAP_TRACING_STANDALONE  
 
     // Received time from NTP server
     case RE_TIME_SNTP_SYNC_OK:
