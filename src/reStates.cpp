@@ -624,10 +624,10 @@ void heapCapsDebug(const char *function_name)
 
 static ledQueue_t _ledSysQueue = NULL;
 
-void ledSysInit(int8_t ledGPIO, bool ledHigh, ledCustomControl_t customControl)
+void ledSysInit(int8_t ledGPIO, bool ledHigh, uint32_t taskStackSize, ledCustomControl_t customControl)
 {
   if (_ledSysQueue == NULL) {
-    _ledSysQueue = ledTaskCreate(ledGPIO, ledHigh, true, "led_system", customControl);
+    _ledSysQueue = ledTaskCreate(ledGPIO, ledHigh, true, "led_system", taskStackSize, customControl);
   };
 }
 
@@ -1162,17 +1162,21 @@ static void statesNotifyWiFiUnavailable(bool setState)
 
 static char* statesGetDebugHeap(re_restart_debug_t *debug)
 {
-  if (debug->heap_total > 0) {
+  if ((debug->heap_total > 0) && (debug->heap_total > debug->heap_free)) {
     struct tm timeinfo;
     localtime_r(&debug->heap_min_time, &timeinfo);
     char time_buffer[CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE];
     memset(&time_buffer, 0, CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE);
     strftime(time_buffer, CONFIG_FORMAT_STRFTIME_DTS_BUFFER_SIZE, CONFIG_FORMAT_DTS, &timeinfo);
 
-    return malloc_stringf("%d : %d (%.1f%%) : %d (%.1f%%) %s", 
-      debug->heap_total,
-      debug->heap_free, 100.0 * debug->heap_free / debug->heap_total,
-      debug->heap_free_min, 100.0 * debug->heap_free_min / debug->heap_total, time_buffer);
+    double heapTotal = (double)debug->heap_total / 1024;
+    double heapFree = (double)debug->heap_free / 1024;
+    double heapFreeMin = (double)debug->heap_free_min / 1024;
+
+    return malloc_stringf("%.1fkB : %.1fkB (%.1f%%) : %.1fkB (%.1f%%) %s", 
+      heapTotal,
+      heapFree, 100.0 * (heapFree / heapTotal),
+      heapFreeMin, 100.0 * (heapFreeMin / heapTotal), time_buffer);
   };
   return nullptr;
 }
@@ -1581,15 +1585,23 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
 
     case RE_MQTT_SERVER_PRIMARY:
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_PRIMARY");
-      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
-        notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 2, nullptr);
+      #if defined(CONFIG_MQTT1_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_MQTT1_TLS_ENABLED
+          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 2, malloc_stringf("%s:%d", CONFIG_MQTT1_HOST, CONFIG_MQTT1_PORT_TLS));
+        #else
+          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 2, malloc_stringf("%s:%d", CONFIG_MQTT1_HOST, CONFIG_MQTT1_PORT_TCP));
+        #endif // CONFIG_MQTT1_TLS_ENABLED
       #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       break;
 
     case RE_MQTT_SERVER_RESERVED:
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_SERVER_RESERVED");
-      #if CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
-        notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 3, nullptr);
+      #if defined(CONFIG_MQTT2_TYPE) && CONFIG_ENABLE_STATES_NOTIFICATIONS && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
+        #if CONFIG_MQTT2_TLS_ENABLED
+          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 3, malloc_stringf("%s:%d", CONFIG_MQTT2_HOST, CONFIG_MQTT2_PORT_TLS));
+        #else
+          notifierMqtt.sendExNotify(FNS_FAILURE, time(nullptr), 3, malloc_stringf("%s:%d", CONFIG_MQTT2_HOST, CONFIG_MQTT2_PORT_TCP));
+        #endif // CONFIG_MQTT1_TLS_ENABLED
       #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
       break;
 

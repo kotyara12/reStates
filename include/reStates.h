@@ -118,7 +118,7 @@ bool statesMqttIsEnabled();
 void heapAllocFailedInit();
 uint32_t heapAllocFailedCount();
 
-void ledSysInit(int8_t ledGPIO, bool ledHigh, ledCustomControl_t customControl);
+void ledSysInit(int8_t ledGPIO, bool ledHigh, uint32_t taskStackSize, ledCustomControl_t customControl);
 void ledSysFree();
 void ledSysFree();
 void ledSysOn(const bool fixed);
