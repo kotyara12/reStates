@@ -1677,25 +1677,30 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
       #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         rSensor* sensor = (rSensor*)data->sensor;
         switch ((sensor_status_t)data->new_status) {
-          case SENSOR_STATUS_NAN:
+          case SENSOR_STATUS_NO_INIT:
             tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
               CONFIG_TELEGRAM_DEVICE, 
-              CONFIG_MESSAGE_TG_SENSOR_STATE_NAN, sensor->getName());
+              CONFIG_MESSAGE_TG_SENSOR_STATE_NO_INIT, sensor->getName());
+            break;
+          case SENSOR_STATUS_NO_DATA:
+            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
+              CONFIG_TELEGRAM_DEVICE, 
+              CONFIG_MESSAGE_TG_SENSOR_STATE_NO_DATA, sensor->getName());
             break;
           case SENSOR_STATUS_OK:
             tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
               CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_OK, sensor->getName());
             break;
-          case SENSOR_STATUS_TIMEOUT:
+          case SENSOR_STATUS_CONN_ERROR:
             tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
               CONFIG_TELEGRAM_DEVICE, 
-              CONFIG_MESSAGE_TG_SENSOR_STATE_TIMEOUT, sensor->getName());
+              CONFIG_MESSAGE_TG_SENSOR_STATE_CONN_ERROR, sensor->getName());
             break;
           case SENSOR_STATUS_CAL_ERROR:
             tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
               CONFIG_TELEGRAM_DEVICE, 
-              CONFIG_MESSAGE_TG_SENSOR_STATE_CALIBRATION, sensor->getName());
+              CONFIG_MESSAGE_TG_SENSOR_STATE_CAL_ERROR, sensor->getName());
             break;
           case SENSOR_STATUS_CRC_ERROR:
             tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
