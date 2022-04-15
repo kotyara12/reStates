@@ -11,6 +11,9 @@
 #include "reNvs.h"
 #include "project_config.h"
 #include "def_consts.h"
+#if CONFIG_MQTT_OTA_ENABLE
+#include "esp_ota_ops.h"
+#endif // CONFIG_MQTT_OTA_ENABLE
 #if CONFIG_HEAP_TRACING_STANDALONE
 #include "esp_heap_trace.h"
 #include "reMqtt.h"
@@ -1265,6 +1268,10 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
   if (data) {
     // System started
     if (event_id == RE_SYS_STARTED) {
+      #if CONFIG_MQTT_OTA_ENABLE
+        esp_ota_mark_app_valid_cancel_rollback();
+      #endif // CONFIG_MQTT_OTA_ENABLE
+
       #if CONFIG_HEAP_TRACING_STANDALONE
         heapLeaksStart();
       #endif // CONFIG_HEAP_TRACING_STANDALONE  
