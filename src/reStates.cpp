@@ -1305,6 +1305,10 @@ static void statesEventHandlerSystem(void* arg, esp_event_base_t event_base, int
       };
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_OPENMON_ERROR", data->type);
     }
+    // NarodMon
+    else if (event_id == RE_SYS_NARODMON_ERROR) {
+      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE_MODE, event_base, "RE_SYS_NARODMON_ERROR", data->type);
+    }
     // ThingSpeak
     else if (event_id == RE_SYS_THINGSPEAK_ERROR) {
       if (data->type == RE_SYS_CLEAR) {
