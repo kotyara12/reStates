@@ -756,7 +756,7 @@ void ledSysBlinkAuto()
 
 static uint32_t _statesNotifyDelayFailure = CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME;
 
-static bool statesNotifySend(bool alert, const char* message, const char* object, notify_state_t state, time_t time_failure, time_t time_state)
+static bool statesNotifySend(msg_options_t options, const char* message, const char* object, notify_state_t state, time_t time_failure, time_t time_state)
 {
   // Format failure start time
   struct tm tm_failure;
@@ -779,27 +779,27 @@ static bool statesNotifySend(bool alert, const char* message, const char* object
     uint16_t duration_s = failure_duration % 3600 % 60;
     // Send notify
     if (object) {
-      return tgSend(TG_SERVICE, alert, CONFIG_TELEGRAM_DEVICE, message, object, str_failure, str_recovery, duration_h, duration_m, duration_s);
+      return tgSendMsg(options, CONFIG_TELEGRAM_DEVICE, message, object, str_failure, str_recovery, duration_h, duration_m, duration_s);
     } else {
-      return tgSend(TG_SERVICE, alert, CONFIG_TELEGRAM_DEVICE, message, str_failure, str_recovery, duration_h, duration_m, duration_s);
+      return tgSendMsg(options, CONFIG_TELEGRAM_DEVICE, message, str_failure, str_recovery, duration_h, duration_m, duration_s);
     };
   } else {
     // Send notify
     if (object) {
-      return tgSend(TG_SERVICE, alert, CONFIG_TELEGRAM_DEVICE, message, object, str_failure);
+      return tgSendMsg(options, CONFIG_TELEGRAM_DEVICE, message, object, str_failure);
     } else {
-      return tgSend(TG_SERVICE, alert, CONFIG_TELEGRAM_DEVICE, message, str_failure);
+      return tgSendMsg(options, CONFIG_TELEGRAM_DEVICE, message, str_failure);
     };
   };
   return false;
 }
 
-static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value,time_t time_failure, time_t time_state)
+static bool statesNotifySendHost(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value,time_t time_failure, time_t time_state)
 {
   if (state == FNS_OK) {
-    return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_HOST_AVAILABLE, object, state, time_failure, time_state);
+    return statesNotifySend(options, CONFIG_MESSAGE_TG_HOST_AVAILABLE, object, state, time_failure, time_state);
   } else {
-    return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, object, state, time_failure, time_state);
+    return statesNotifySend(options, CONFIG_MESSAGE_TG_HOST_UNAVAILABLE, object, state, time_failure, time_state);
   };
 }
 
@@ -807,58 +807,61 @@ static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert,
 #if CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     static uint8_t _notifyTgWifi = CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS;
-    static bool statesNotifySendWifi(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendWifi(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (_notifyTgWifi) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), state, time_failure, time_state);
       };
       return false;
     };
   #else
-    static bool statesNotifySendWifi(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendWifi(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
-      return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), state, time_failure, time_state);
+      return statesNotifySend(options, CONFIG_MESSAGE_TG_WIFI_AVAILABLE, wifiGetSSID(), state, time_failure, time_state);
     };
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 
-  reFailureNotifier notifierWifi("wifi", CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, FNK_RECOVERY, 0, statesNotifySendWifi);
+  reFailureNotifier notifierWifi("wifi", 
+    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, CONFIG_NOTIFY_TELEGRAM_WIFI_PRIORITY), 
+    FNK_RECOVERY, 0, statesNotifySendWifi);
 #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS
 
 // --  Ping --------------------------------------------------------------------------------------------------------------
 #if CONFIG_PINGER_ENABLE && ((CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE > 0) || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     static uint8_t _notifyTgInet = CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE;
-    static bool statesNotifySendInet(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendInet(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (state == FNS_OK) {
         if (_notifyTgInet > 0) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, state, time_failure, time_state);
         };
       } else if (state == FNS_SLOWDOWN) {
         if (_notifyTgInet > 1) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_SLOWDOWN, nullptr, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_SLOWDOWN, nullptr, state, time_failure, time_state);
         };
       } else {
         if (_notifyTgInet > 0) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, nullptr, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, nullptr, state, time_failure, time_state);
         };
       };
       return false;
     }
   #else
-    static bool statesNotifySendInet(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendInet(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (state == FNS_OK) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_AVAILABLE, nullptr, state, time_failure, time_state);
       } else if (state == FNS_SLOWDOWN) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_SLOWDOWN, nullptr, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_SLOWDOWN, nullptr, state, time_failure, time_state);
       } else {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, nullptr, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_INET_UNAVAILABLE, nullptr, state, time_failure, time_state);
       };
     }
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 
-  reFailureNotifier notifierInet("ping", CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, 
+  reFailureNotifier notifierInet("ping", 
+    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_INET_UNAVAILABLE, CONFIG_NOTIFY_TELEGRAM_INET_PRIORITY), 
     FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendInet);
 #endif // CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE
 
@@ -866,84 +869,89 @@ static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert,
 #if CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     static uint8_t _notifyTgMqtt = CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS;
-    static bool statesNotifySendMqtt(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendMqtt(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (value == 0) {
         if (state == FNS_OK) {
           if (_notifyTgMqtt) {
-            return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_OK, object, state, time_failure, time_state);
+            return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_OK, object, state, time_failure, time_state);
           };
         } else {
           if (_notifyTgMqtt) {
-            return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_LOST, object, state, time_failure, time_state);
+            return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_LOST, object, state, time_failure, time_state);
           };
         };
       } else if (value == 1) {
         if (_notifyTgMqtt) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, object, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, object, state, time_failure, time_state);
         };
       } else if (value == 2) {
         if (_notifyTgMqtt) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_PRIMARY, object, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_PRIMARY, object, state, time_failure, time_state);
         };
       } else if (value == 3) {
         if (_notifyTgMqtt) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_RESERVED, object, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_RESERVED, object, state, time_failure, time_state);
         };
       };
       return false;
     }
 
     #if (defined(CONFIG_MQTT1_TYPE) && CONFIG_MQTT1_PING_CHECK) || (defined(CONFIG_MQTT2_TYPE) && CONFIG_MQTT2_PING_CHECK)
-    static bool statesNotifySendMqttPing(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendMqttPing(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (_notifyTgMqtt) {
-        return statesNotifySendHost(notifier, notify_alert, object, state, value, time_failure, time_state);
+        return statesNotifySendHost(notifier, options, object, state, value, time_failure, time_state);
       };
       return false;
     }
     #endif // CONFIG_MQTTx_PING_CHECK
   #else
-    static bool statesNotifySendMqtt(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendMqtt(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (value == 0) {
         if (state == FNS_OK) {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_OK, object, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_OK, object, state, time_failure, time_state);
         } else {
-          return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_LOST, object, state, time_failure, time_state);
+          return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_LOST, object, state, time_failure, time_state);
         };
       } else if (value == 1) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, object, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, object, state, time_failure, time_state);
       } else if (value == 2) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_PRIMARY, object, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_PRIMARY, object, state, time_failure, time_state);
       } else if (value == 3) {
-        return statesNotifySend(notify_alert, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_RESERVED, object, state, time_failure, time_state);
+        return statesNotifySend(options, CONFIG_MESSAGE_TG_MQTT_SERVER_CHANGE_RESERVED, object, state, time_failure, time_state);
       };
       return false;
     }
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 
-  reFailureNotifier notifierMqtt("mqtt", CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+  reFailureNotifier notifierMqtt("mqtt", 
+    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, CONFIG_NOTIFY_TELEGRAM_MQTT_PRIORITY),
     FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendMqtt);
 #endif // CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS
 
 // --  MQTT Ping ---------------------------------------------------------------------------------------------------------
 #if defined(CONFIG_MQTT1_TYPE) && CONFIG_MQTT1_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
-    reFailureNotifier notifierMqttPing1(CONFIG_MQTT1_HOST, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+    reFailureNotifier notifierMqttPing1(CONFIG_MQTT1_HOST, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, CONFIG_NOTIFY_TELEGRAM_MQTT_PRIORITY),
       FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendMqttPing);
   #else
-    reFailureNotifier notifierMqttPing1(CONFIG_MQTT1_HOST, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+    reFailureNotifier notifierMqttPing1(CONFIG_MQTT1_HOST, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, CONFIG_NOTIFY_TELEGRAM_MQTT_PRIORITY),
       FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendHost);
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 #endif // CONFIG_MQTT1_PING_CHECK
 
 #if defined(CONFIG_MQTT2_TYPE) && CONFIG_MQTT2_PING_CHECK && (CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
-    reFailureNotifier notifierMqttPing2(CONFIG_MQTT2_HOST, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+    reFailureNotifier notifierMqttPing2(CONFIG_MQTT2_HOST, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, CONFIG_NOTIFY_TELEGRAM_MQTT_PRIORITY),
       FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendMqttPing);
   #else
-    reFailureNotifier notifierMqttPing2(CONFIG_MQTT2_HOST, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, 
+    reFailureNotifier notifierMqttPing2(CONFIG_MQTT2_HOST, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_STATUS, CONFIG_NOTIFY_TELEGRAM_MQTT_PRIORITY),
       FNK_AUTO, &_statesNotifyDelayFailure, statesNotifySendHost);
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
 #endif // CONFIG_MQTT2_PING_CHECK
@@ -952,16 +960,17 @@ static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert,
 #if CONFIG_OPENMON_ENABLE && (CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     static uint8_t _notifyTgOpenMon = CONFIG_NOTIFY_TELEGRAM_OPENMON_STATUS;
-    static bool statesNotifySendOpenMon(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendOpenMon(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (_notifyTgOpenMon) {
-        return statesNotifySendHost(notifier, notify_alert, object, state, value, time_failure, time_state);
+        return statesNotifySendHost(notifier, options, object, state, value, time_failure, time_state);
       };
       return false;
     }
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
   
-  reFailureNotifier notifierOpenMon("open-monitoring.online", CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, 
+  reFailureNotifier notifierOpenMon("open-monitoring.online", 
+    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_OPENMON_STATUS, CONFIG_NOTIFY_TELEGRAM_OPENMON_PRIORITY),
     FNK_AUTO, &_statesNotifyDelayFailure, 
     #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
       statesNotifySendOpenMon);
@@ -974,16 +983,17 @@ static bool statesNotifySendHost(reFailureNotifier* notifier, bool notify_alert,
 #if CONFIG_THINGSPEAK_ENABLE && (CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
     static uint8_t _notifyTgThingSpeak = CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS;
-    static bool statesNotifySendThingSpeak(reFailureNotifier* notifier, bool notify_alert, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
+    static bool statesNotifySendThingSpeak(reFailureNotifier* notifier, msg_options_t options, const char* object, notify_state_t state, int32_t value, time_t time_failure, time_t time_state)
     {
       if (_notifyTgThingSpeak) {
-        return statesNotifySendHost(notifier, notify_alert, object, state, value, time_failure, time_state);
+        return statesNotifySendHost(notifier, options, object, state, value, time_failure, time_state);
       };
       return false;
     }
   #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
   
-  reFailureNotifier notifierThingSpeak("thingspeak.com", CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, 
+  reFailureNotifier notifierThingSpeak("thingspeak.com", 
+    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_THINGSPEAK_STATUS, CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_PRIORITY),
     FNK_AUTO, &_statesNotifyDelayFailure, 
     #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
       statesNotifySendThingSpeak);
@@ -1229,7 +1239,7 @@ static void statesEventCheckSystemStarted()
      && statesCheck(MQTT_CONNECTED, false)) {
       statesSet(SYSTEM_STARTED);
       eventLoopPostSystem(RE_SYS_STARTED, RE_SYS_SET, false, 0);
-      #if CONFIG_TELEGRAM_ENABLE
+      #if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_START
         #if CONFIG_RESTART_DEBUG_INFO
           re_restart_debug_t debug = debugGet();
           char* debug_heap = statesGetDebugHeap(&debug);
@@ -1239,25 +1249,25 @@ static void statesEventCheckSystemStarted()
               debug_trace = statesGetDebugTrace(&debug);
             #endif // CONFIG_RESTART_DEBUG_STACK_DEPTH
             if (debug_trace) {
-              tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_TRACE, 
-                APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
+              tgSend(MK_MAIN, CONFIG_NOTIFY_TELEGRAM_START_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_START, CONFIG_TELEGRAM_DEVICE, 
+                CONFIG_MESSAGE_TG_VERSION_TRACE, APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
                 debug_heap, debug_trace);
               free(debug_trace);
             } else {
-              tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_HEAP, 
-                APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
+              tgSend(MK_MAIN, CONFIG_NOTIFY_TELEGRAM_START_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_START, CONFIG_TELEGRAM_DEVICE, 
+                CONFIG_MESSAGE_TG_VERSION_HEAP, APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1), 
                 debug_heap);
             };
             free(debug_heap);
           } else {
-            tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_DEF, 
-              APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
+            tgSend(MK_MAIN, CONFIG_NOTIFY_TELEGRAM_START_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_START, CONFIG_TELEGRAM_DEVICE, 
+              CONFIG_MESSAGE_TG_VERSION_DEF, APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
           };
         #else
-          tgSend(TG_MAIN, false, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_VERSION_DEF, 
-            APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
+          tgSend(MK_MAIN, CONFIG_NOTIFY_TELEGRAM_START_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_START, CONFIG_TELEGRAM_DEVICE, 
+            CONFIG_MESSAGE_TG_VERSION_DEF, APP_VERSION, getResetReason(), getResetReasonRtc(0), getResetReasonRtc(1));
         #endif // CONFIG_RESTART_DEBUG_INFO
-      #endif // CONFIG_TELEGRAM_ENABLE
+      #endif // CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_START
     };
   };
 }
@@ -1363,7 +1373,8 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         if (_notifyTgSilentMode) {
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
-          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_ON);
+          tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SILENT_MODE_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, 
+            CONFIG_MESSAGE_TG_SILENT_MODE_ON);
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         };
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1378,7 +1389,8 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         if (_notifyTgSilentMode) {
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
-          tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, CONFIG_MESSAGE_TG_SILENT_MODE_OFF);
+          tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SILENT_MODE_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SILENT_MODE, CONFIG_TELEGRAM_DEVICE, 
+            CONFIG_MESSAGE_TG_SILENT_MODE_OFF);
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
         };
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1625,8 +1637,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
           if (event_data) {
             char* error = (char*)event_data;
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_MQTT_ERROR, error);
           };
         #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
@@ -1689,43 +1700,39 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
         rSensor* sensor = (rSensor*)data->sensor;
         switch ((sensor_status_t)data->new_status) {
           case SENSOR_STATUS_NO_INIT:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_NO_INIT, sensor->getName());
             break;
           case SENSOR_STATUS_NO_DATA:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_NO_DATA, sensor->getName());
             break;
           case SENSOR_STATUS_OK:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_OK, sensor->getName());
             break;
           case SENSOR_STATUS_CONN_ERROR:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_CONN_ERROR, sensor->getName());
             break;
           case SENSOR_STATUS_CAL_ERROR:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_CAL_ERROR, sensor->getName());
             break;
           case SENSOR_STATUS_CRC_ERROR:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_CRC_ERROR, sensor->getName());
             break;
+          case SENSOR_STATUS_BAD_DATA:
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
+              CONFIG_MESSAGE_TG_SENSOR_STATE_BAD_DATA, sensor->getName());
+            break;
           case SENSOR_STATUS_ERROR:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_ERROR, sensor->getName());
             break;
           default:
-            tgSend(TG_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, 
-              CONFIG_TELEGRAM_DEVICE, 
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_SENSOR_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_SENSOR_STATE, CONFIG_TELEGRAM_DEVICE, 
               CONFIG_MESSAGE_TG_SENSOR_STATE_UNKNOWN_ERROR, sensor->getName());
             break;
         };
