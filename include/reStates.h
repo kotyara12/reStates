@@ -11,12 +11,32 @@
 
 #include <stddef.h>
 #include "esp_bit_defs.h"
+#include "project_config.h"
+#include "def_consts.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "rLog.h"
+#include "rStrings.h"
 #include "reLed.h"
-#include "project_config.h"
-#include "def_consts.h"
+#include "reEsp32.h"
+#include "reEvents.h"
+#include "reParams.h"
+#if CONFIG_MQTT_OTA_ENABLE
+#include "esp_ota_ops.h"
+#endif // CONFIG_MQTT_OTA_ENABLE
+#if CONFIG_HEAP_TRACING_STANDALONE
+#include "esp_heap_trace.h"
+#endif // CONFIG_HEAP_TRACING_STANDALONE
+#if CONFIG_TELEGRAM_ENABLE
+#include "reTgSend.h"
+#endif // CONFIG_TELEGRAM_ENABLE
+#if CONFIG_TELEGRAM_ENABLE && CONFIG_NOTIFY_TELEGRAM_GLOBAL
+  #include "reNotifier.h"
+  #define CONFIG_ENABLE_STATES_NOTIFICATIONS 1
+#else
+  #define CONFIG_ENABLE_STATES_NOTIFICATIONS 0
+#endif // CONFIG_TELEGRAM_ENABLE
 
 static const uint32_t SYSTEM_STARTED       = BIT0;
 // Time
@@ -112,11 +132,11 @@ bool statesTimeIsSilent();
 bool statesMqttIsConnected();
 bool statesMqttIsPrimary();
 bool statesMqttIsLocal();
-bool statesMqttIsServerEnabled();
 bool statesMqttIsEnabled();
 
 void heapAllocFailedInit();
 uint32_t heapAllocFailedCount();
+void heapCapsDebug(const char *function_name);
 
 void ledSysInit(int8_t ledGPIO, bool ledHigh, uint32_t taskStackSize, ledCustomControl_t customControl);
 void ledSysFree();

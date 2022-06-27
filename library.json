@@ -1,0 +1,17 @@
+{
+  "name": "reStates",
+  "version": "2.7.0",
+  "description": "Module for centralized monitoring of the state of system components: WiFi, MQTT, Telegram, etc.",
+  "keywords": "system",
+  "authors":
+  [
+    {
+      "name": "Alexander Razzhivin",
+      "email": "kotyara12@yandex.ru",
+      "url": "https://kotyara12.ru"
+    }
+  ],
+  "license": "MIT",
+  "frameworks": ["espidf"],
+  "platforms": ["espressif32"]
+}
