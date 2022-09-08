@@ -440,7 +440,7 @@ char* statesGetJson()
 char* statesGetErrorsJson()
 {
   EventBits_t errors = statesGetErrors();
-  return malloc_stringf("{\"general\":%d,\"heap\":%d,\"mqtt\":%d,\"telegram\":%d,\"smtp\":%d,\"site\":%d,\"thingspeak\":%d,\"openmon\":%d,\"narodmon\":%d,\"sensor1\":%d,\"sensor2\":%d,\"sensor3\":%d,\"sensor4\":%d,\"sensor5\":%d,\"sensor6\":%d,\"sensor7\":%d,\"sensor8\":%d}",
+  return malloc_stringf("{\"general\":%d,\"heap\":%d,\"mqtt\":%d,\"telegram\":%d,\"smtp\":%d,\"site\":%d,\"thingspeak\":%d,\"openmon\":%d,\"narodmon\":%d,\"sensor0\":%d,\"sensor1\":%d,\"sensor2\":%d,\"sensor3\":%d,\"sensor4\":%d,\"sensor5\":%d,\"sensor6\":%d,\"sensor7\":%d}",
     (errors & ERR_GENERAL) == ERR_GENERAL,
     (errors & ERR_HEAP) == ERR_HEAP,
     (errors & ERR_MQTT) == ERR_MQTT,
