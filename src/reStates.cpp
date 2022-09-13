@@ -21,6 +21,60 @@ static const char* logTAG   = "STATES";
 void ledSysBlinkAuto();
 
 // -----------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------- Watchdog timers ---------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------------
+
+#if defined(CONFIG_MQTT_RESTART_DEVICE_MINUTES) && (CONFIG_MQTT_RESTART_DEVICE_MINUTES > 0)
+
+re_restart_timer_t _wdtRestartMqtt;
+
+void wdtRestartMqttInit()
+{
+  espRestartTimerInit(&_wdtRestartMqtt, RR_MQTT_TIMEOUT, "wdt_mqtt");
+}
+
+void wdtRestartMqttFree()
+{
+  espRestartTimerFree(&_wdtRestartMqtt);
+}
+
+void wdtRestartMqttStart()
+{
+  if (statesMqttIsEnabled()) {
+    espRestartTimerStartM(&_wdtRestartMqtt, RR_MQTT_TIMEOUT, CONFIG_MQTT_RESTART_DEVICE_MINUTES, false);
+  } else {
+    espRestartTimerBreak(&_wdtRestartMqtt);
+  };
+}
+
+void wdtRestartMqttBreak()
+{
+  espRestartTimerBreak(&_wdtRestartMqtt);
+};
+
+void wdtRestartMqttCheck()
+{
+  if (statesMqttIsConnected()) {
+    wdtRestartMqttBreak();
+  } else {
+    if (statesMqttIsLocal() || statesInetIsAvailabled()) {
+      wdtRestartMqttStart();
+    } else {
+      wdtRestartMqttBreak();
+    };
+  };
+}
+
+#else
+  // Stubs
+  #define wdtRestartMqttInit()
+  #define wdtRestartMqttFree()
+  #define wdtRestartMqttStart()
+  #define wdtRestartMqttCheck()
+  #define wdtRestartMqttBreak()
+#endif 
+
+// -----------------------------------------------------------------------------------------------------------------------
 // ------------------------------------------------- Verify OTA complete -------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
@@ -72,7 +126,7 @@ void statesFirmwareVerifyStart()
 {
   if (espGetResetReason() == RR_OTA) {
     #if defined(CONFIG_OTA_ROLLBACK_TIMEOUT) && (CONFIG_OTA_ROLLBACK_TIMEOUT > 0)
-    statesFirmwareVerifyTimerStart();
+      statesFirmwareVerifyTimerStart();
     #endif // CONFIG_OTA_ROLLBACK_TIMEOUT
   };
 }
@@ -83,7 +137,7 @@ void statesFirmwareVerifyCompete()
     rlog_i(logTAG, "Firmware verify completed");
 
     #if defined(CONFIG_OTA_ROLLBACK_TIMEOUT) && (CONFIG_OTA_ROLLBACK_TIMEOUT > 0)
-    statesFirmwareVerifyTimerStop();
+      statesFirmwareVerifyTimerStop();
     #endif // CONFIG_OTA_ROLLBACK_TIMEOUT
   };
 
@@ -122,6 +176,8 @@ void statesInit(bool registerEventHandler)
     xEventGroupClearBits(_evgErrors, 0x00FFFFFFU);
   };
 
+  wdtRestartMqttInit();
+
   if ((_evgStates) && (_evgErrors)) {
     heapAllocFailedInit();
   };
@@ -156,6 +212,8 @@ void statesFree(bool unregisterEventHandler)
     vEventGroupDelete(_evgStates);
     _evgStates = nullptr;
   };
+
+  wdtRestartMqttFree();
 }
 
 EventBits_t statesGet() 
@@ -1502,12 +1560,14 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
     case RE_WIFI_STA_INIT:
       statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
+      wdtRestartMqttBreak();
       break;
 
     case RE_WIFI_STA_STARTED:
       statesSet(WIFI_STA_STARTED);
       statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
+      wdtRestartMqttBreak();
       break;
 
     case RE_WIFI_STA_GOT_IP:
@@ -1519,6 +1579,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
         healthMonitorsWiFiAvailable(true);
       #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       statesEventCheckSystemStarted();
+      wdtRestartMqttStart();
       break;
 
     case RE_WIFI_STA_DISCONNECTED:
@@ -1530,6 +1591,7 @@ static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32
       #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
+      wdtRestartMqttBreak();
       break;
 
     default:
@@ -1555,6 +1617,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
       eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
       statesEventCheckSystemStarted();
+      wdtRestartMqttCheck();
       break;
 
     case RE_PING_INET_SLOWDOWN: {
@@ -1577,6 +1640,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
           };
         };
       #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+      wdtRestartMqttCheck();
       break;
 
     case RE_PING_MQTT1_AVAILABLE:
@@ -1635,6 +1699,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
     case RE_MQTT_CONNECTED:
       statesSet(MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONNECTED");
+      wdtRestartMqttBreak();
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         statesSetBit(MQTT_PRIMARY, data->primary);
@@ -1653,6 +1718,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
     case RE_MQTT_CONN_LOST:
       statesClear(MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_LOST");
+      wdtRestartMqttStart();
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         #if ENABLE_NOTIFY_MQTT_STATUS
@@ -1668,6 +1734,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
     case RE_MQTT_CONN_FAILED:
       statesClear(MQTT_CONNECTED);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_MQTT_CONN_FAILED");
+      wdtRestartMqttStart();
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         #if ENABLE_NOTIFY_MQTT_STATUS
