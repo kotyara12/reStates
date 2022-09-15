@@ -200,15 +200,11 @@ void statesFree(bool unregisterEventHandler)
   };
 
   if (_evgErrors) {
-    #if CONFIG_STATES_STATIC_ALLOCATION
-    #endif // CONFIG_STATES_STATIC_ALLOCATION
     vEventGroupDelete(_evgErrors);
     _evgErrors = nullptr;
   };
 
   if (_evgStates) {
-    #if CONFIG_STATES_STATIC_ALLOCATION
-    #endif // CONFIG_STATES_STATIC_ALLOCATION
     vEventGroupDelete(_evgStates);
     _evgStates = nullptr;
   };
