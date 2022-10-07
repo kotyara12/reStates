@@ -528,11 +528,7 @@ void heapAllocFailedHook(size_t requested_size, uint32_t caps, const char *funct
   #else
     heapFailsCount++;
     #if CONFIG_HEAP_ALLOC_FAILED_RESTART
-      #if defined(CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY) && (CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY > 0) 
-        espRestart(RR_HEAP_ALLOCATION_FAILED, CONFIG_HEAP_ALLOC_FAILED_RESTART_DELAY); 
-      #else
-        espRestart(RR_HEAP_ALLOCATION_FAILED, 0); 
-      #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART_WAIT
+      espRestart(RR_HEAP_ALLOCATION_FAILED); 
     #endif // CONFIG_HEAP_ALLOC_FAILED_RESTART
   #endif // CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS
 }
