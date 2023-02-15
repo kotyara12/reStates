@@ -670,15 +670,15 @@ char* heapLeaksJson()
           stack = malloc_stringf("%p %p %p %p %p %p %p %p %p %p", rec.alloced_by[0], rec.alloced_by[1], rec.alloced_by[2], rec.alloced_by[3], rec.alloced_by[4], rec.alloced_by[5], rec.alloced_by[6], rec.alloced_by[7], rec.alloced_by[8], rec.alloced_by[9]);
         #endif // #elif CONFIG_HEAP_TRACING_STACK_DEPTH
 
-        char* timest = malloc_timestr_empty(CONFIG_FORMAT_DTS, rec.timestamp);
+        // 2023-02-15: fixed possible sharing error from multiple tasks
+        char ts_buffer[CONFIG_FORMAT_STRFTIME_BUFFER_SIZE];
+        time2str_empty(CONFIG_FORMAT_DTS, rec.timestamp, ts_buffer, sizeof(ts_buffer));
 
-        if ((stack) && (timest)) {
+        if (stack) {
           item = malloc_stringf("{\"timestamp\":\"%s\",\"repeats\":%d,\"address\":\"%p\",\"size\":%d,\"cpu\":%d,\"ccount\":\"0x%08x\",\"stack\":\"%s\"}", 
-            timest, rec.repeats, rec.address, rec.size, rec.ccount & 1, rec.ccount & ~3, stack);
+            ts_buffer, rec.repeats, rec.address, rec.size, rec.ccount & 1, rec.ccount & ~3, stack);
+          free(stack);
         };
-
-        if (timest) free(timest);
-        if (stack) free(stack);
 
         // Add item to JSON array
         if (item) {
