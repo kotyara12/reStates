@@ -672,7 +672,7 @@ char* heapLeaksJson()
 
         // 2023-02-15: fixed possible sharing error from multiple tasks
         char ts_buffer[CONFIG_FORMAT_STRFTIME_BUFFER_SIZE];
-        time2str_empty(CONFIG_FORMAT_DTS, rec.timestamp, ts_buffer, sizeof(ts_buffer));
+        time2str_empty(CONFIG_FORMAT_DTS, &(rec.timestamp), &ts_buffer[0], sizeof(ts_buffer));
 
         if (stack) {
           item = malloc_stringf("{\"timestamp\":\"%s\",\"repeats\":%d,\"address\":\"%p\",\"size\":%d,\"cpu\":%d,\"ccount\":\"0x%08x\",\"stack\":\"%s\"}", 
