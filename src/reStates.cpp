@@ -3,7 +3,9 @@
 #include "esp_timer.h"
 #include "reWiFi.h"
 #include "reMqtt.h"
-#include "reSensor.h"
+#if !defined(CONFIG_NO_SENSORS)
+  #include "reSensor.h"
+#endif // CONFIG_NO_SENSORS
 
 static EventGroupHandle_t _evgStates = nullptr;
 static EventGroupHandle_t _evgErrors = nullptr;
@@ -915,7 +917,7 @@ void ledSysBlinkAuto()
   #define ENABLE_NOTIFY_THINGSPEAK_STATUS 0
 #endif // CONFIG_NOTIFY_TELEGRAM_THINGSPEAK_STATUS
 
-#if CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
+#if !defined(CONFIG_NO_SENSORS) && (CONFIG_NOTIFY_TELEGRAM_SENSOR_STATE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #define ENABLE_NOTIFY_SENSOR_STATE 1
 #else
   #define ENABLE_NOTIFY_SENSOR_STATE 0
@@ -1820,6 +1822,8 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
   };
 }
 
+#ifndef CONFIG_NO_SENSORS
+
 static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
   // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_SENSOR_STATUS_CHANGED");
@@ -1875,17 +1879,21 @@ static void statesEventHandlerSensor(void* arg, esp_event_base_t event_base, int
   };
 }
 
+#endif // CONFIG_NO_SENSORS
+
 bool statesEventHandlerRegister()
 {
   rlog_d(logTAG, "Register system states event handlers...");
-  bool ret = eventHandlerRegister(RE_SYSTEM_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSystem, nullptr)
-          && eventHandlerRegister(RE_TIME_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerTime, nullptr)
+  bool ret = eventHandlerRegister(RE_TIME_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerTime, nullptr)
           && eventHandlerRegister(RE_WIFI_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerWiFi, nullptr)
           && eventHandlerRegister(RE_MQTT_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerMqtt, nullptr)
           #if CONFIG_PINGER_ENABLE
             && eventHandlerRegister(RE_PING_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerPing, nullptr)
           #endif // CONFIG_PINGER_ENABLE
-          && eventHandlerRegister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor, nullptr);
+          #ifndef CONFIG_NO_SENSORS
+          && eventHandlerRegister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor, nullptr)
+          #endif // CONFIG_NO_SENSORS
+          && eventHandlerRegister(RE_SYSTEM_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSystem, nullptr);
   if (ret) {
     #if CONFIG_ENABLE_STATES_NOTIFICATIONS && CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
       healthMonitorsRegisterParameters();
@@ -1903,6 +1911,8 @@ void statesEventHandlerUnregister()
   #if CONFIG_PINGER_ENABLE
     eventHandlerUnregister(RE_PING_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerPing);
   #endif // CONFIG_PINGER_ENABLE
-  eventHandlerUnregister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor);
+  #ifndef CONFIG_NO_SENSORS
+    eventHandlerUnregister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor);
+  #endif // CONFIG_NO_SENSORS
   rlog_d(logTAG, "System states event handlers unregistered");
 }
