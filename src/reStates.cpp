@@ -1699,11 +1699,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
         statesSetBit(MQTT_PRIMARY, data->primary);
         statesSetBit(MQTT_LOCAL, data->local);
         #if ENABLE_NOTIFY_MQTT_STATUS
-          if (data->host) {
-            hmMqtt.setStateCustom(ESP_OK, time(nullptr), false, malloc_stringf("%s:%d", data->host, data->port));
-          } else {
-            hmMqtt.setStateCustom(ESP_OK, time(nullptr), false, nullptr);
-          };
+          hmMqtt.setStateCustom(ESP_OK, time(nullptr), false, malloc_stringf("%s:%d", data->host, data->port));
         #endif // ENABLE_NOTIFY_MQTT_STATUS
         statesEventCheckSystemStarted();
       };
@@ -1716,11 +1712,7 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
       if (event_data) {
         re_mqtt_event_data_t* data = (re_mqtt_event_data_t*)event_data;
         #if ENABLE_NOTIFY_MQTT_STATUS
-          if (data->host) {
-            hmMqtt.setStateCustom(ESP_ERR_INVALID_STATE, time(nullptr), false, malloc_stringf("%s:%d", data->host, data->port));
-          } else {
-            hmMqtt.setStateCustom(ESP_ERR_INVALID_STATE, time(nullptr), false, nullptr);
-          };
+          hmMqtt.setStateCustom(ESP_ERR_INVALID_STATE, time(nullptr), false, malloc_stringf("%s:%d", data->host, data->port));
         #endif // ENABLE_NOTIFY_MQTT_STATUS
       };
       break;
@@ -1736,13 +1728,8 @@ static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32
           #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
           if (_hmNotifyMqtt) {
           #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
-            if (data->host) {
-              tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, CONFIG_TELEGRAM_DEVICE, 
-                CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, data->host, data->port);
-            } else {
-              tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, CONFIG_TELEGRAM_DEVICE, 
-                CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, "???", "???");
-            };
+            tgSend(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS_PRIORITY, CONFIG_NOTIFY_TELEGRAM_ALERT_MQTT_ERRORS, CONFIG_TELEGRAM_DEVICE, 
+              CONFIG_MESSAGE_TG_MQTT_CONN_FAILED, data->host, data->port);
           #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
           };
           #endif // CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
