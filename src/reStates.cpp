@@ -734,6 +734,8 @@ void heapCapsDebug(const char *function_name)
 // ------------------------------------------------------ System LED -----------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
+#if defined(CONFIG_GPIO_SYSTEM_LED)
+ 
 static ledQueue_t _ledSysQueue = NULL;
 
 void ledSysInit(int8_t ledGPIO, bool ledHigh, uint32_t taskStackSize, ledCustomControl_t customControl)
@@ -856,6 +858,65 @@ void ledSysBlinkAuto()
     ledSysBlinkOn(CONFIG_LEDSYS_NORMAL_QUANTITY, CONFIG_LEDSYS_NORMAL_DURATION, CONFIG_LEDSYS_NORMAL_INTERVAL);
   };
 }
+
+#else
+
+void ledSysInit(int8_t ledGPIO, bool ledHigh, uint32_t taskStackSize, ledCustomControl_t customControl)
+{
+  // Stub
+}
+
+void ledSysFree()
+{
+  // Stub
+}
+
+void ledSysOn(const bool fixed)
+{
+  // Stub
+}
+
+void ledSysOff(const bool fixed)
+{
+  // Stub
+}
+
+void ledSysSet(const bool newState)
+{
+  // Stub
+}
+
+void ledSysSetEnabled(const bool newEnabled)
+{
+  // Stub
+}
+
+void ledSysActivity()
+{
+  // Stub
+}
+
+void ledSysFlashOn(const uint16_t quantity, const uint16_t duration, const uint16_t interval)
+{
+  // Stub
+}
+
+void ledSysBlinkOn(const uint16_t quantity, const uint16_t duration, const uint16_t interval)
+{
+  // Stub
+}
+
+void ledSysBlinkOff()
+{
+  // Stub
+}
+
+void ledSysBlinkAuto()
+{
+  // Stub
+}
+
+#endif // CONFIG_GPIO_SYSTEM_LED
 
 // -----------------------------------------------------------------------------------------------------------------------
 // ------------------------------------------------- Event notifications -------------------------------------------------
@@ -1685,6 +1746,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
       break;
   };
 }
+
 #endif // CONFIG_PINGER_ENABLE
 
 static void statesEventHandlerMqtt(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -1878,7 +1940,7 @@ bool statesEventHandlerRegister()
             && eventHandlerRegister(RE_PING_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerPing, nullptr)
           #endif // CONFIG_PINGER_ENABLE
           #ifndef CONFIG_NO_SENSORS
-          && eventHandlerRegister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor, nullptr)
+          && eventHandlerRegister(RE_SENSOR_EVENTS, RE_SENSOR_STATUS_CHANGED, &statesEventHandlerSensor, nullptr)
           #endif // CONFIG_NO_SENSORS
           && eventHandlerRegister(RE_SYSTEM_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSystem, nullptr);
   if (ret) {
@@ -1899,7 +1961,7 @@ void statesEventHandlerUnregister()
     eventHandlerUnregister(RE_PING_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerPing);
   #endif // CONFIG_PINGER_ENABLE
   #ifndef CONFIG_NO_SENSORS
-    eventHandlerUnregister(RE_SENSOR_EVENTS, ESP_EVENT_ANY_ID, &statesEventHandlerSensor);
+    eventHandlerUnregister(RE_SENSOR_EVENTS, RE_SENSOR_STATUS_CHANGED, &statesEventHandlerSensor);
   #endif // CONFIG_NO_SENSORS
   rlog_d(logTAG, "System states event handlers unregistered");
 }
