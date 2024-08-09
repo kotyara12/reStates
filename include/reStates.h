@@ -48,8 +48,15 @@ static const uint32_t TIME_IS_OK           = TIME_RTC_ENABLED | TIME_SNTP_SYNC_O
 // WiFi
 static const uint32_t WIFI_STA_STARTED     = BIT5;
 static const uint32_t WIFI_STA_CONNECTED   = BIT6;
-static const uint32_t INET_AVAILABLED      = BIT7;
-static const uint32_t INET_SLOWDOWN        = BIT8;
+
+// Ethernet
+static const uint32_t ETHERNET_STARTED     = BIT7;
+static const uint32_t ETHERNET_CONNECTED   = BIT8;
+
+// Ping
+#define NETWORK_CONNECTED                  (WIFI_STA_CONNECTED | ETHERNET_CONNECTED)
+static const uint32_t INET_AVAILABLED      = BIT10;
+static const uint32_t INET_SLOWDOWN        = BIT11;
 
 // System flags
 static const uint32_t SYSTEM_OTA           = BIT12;
@@ -104,9 +111,9 @@ bool statesSetBit(EventBits_t bit, bool state);
 EventBits_t statesWait(EventBits_t bits, BaseType_t clearOnExit, BaseType_t waitAllBits, TickType_t timeout);
 EventBits_t statesWaitMs(EventBits_t bits, BaseType_t clearOnExit, BaseType_t waitAllBits, TickType_t timeout);
 
-bool statesWiFiIsConnected();
-bool statesWiFiWait(TickType_t timeout);
-bool statesWiFiWaitMs(TickType_t timeout);
+bool statesNetworkIsConnected();
+bool statesNetworkWait(TickType_t timeout);
+bool statesNetworkWaitMs(TickType_t timeout);
 bool statesInetIsAvailabled();
 bool statesInetIsDelayed();
 bool statesInetIsGood(bool checkRssi);

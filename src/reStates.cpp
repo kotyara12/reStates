@@ -236,6 +236,19 @@ bool statesCheck(EventBits_t bits, const bool clearOnExit)
   return false;
 }
 
+bool statesCheckAny(EventBits_t bits, const bool clearOnExit) 
+{
+  if (_evgStates) {
+    if (clearOnExit) {
+      return (xEventGroupClearBits(_evgStates, bits) & bits) > 0;
+    } else {
+      return (xEventGroupGetBits(_evgStates) & bits) > 0;
+    };
+  };
+  rlog_e(logTAG, "Failed to check status bits: %X, event group is null!", bits);
+  return false;
+}
+
 bool statesClear(EventBits_t bits)
 {
   if (!_evgStates) {
@@ -303,46 +316,48 @@ EventBits_t statesWaitMs(EventBits_t bits, BaseType_t clearOnExit, BaseType_t wa
 // --------------------------------------------------- Custom routines ---------------------------------------------------
 // -----------------------------------------------------------------------------------------------------------------------
 
-bool statesWiFiIsConnected()
+bool statesNetworkIsConnected()
 {
-  return statesCheck(WIFI_STA_CONNECTED, false);
+  return statesCheckAny(NETWORK_CONNECTED, false);
 }
 
-bool statesWiFiWait(TickType_t timeout)
+bool statesNetworkWait(TickType_t timeout)
 {
-  return (statesWait(WIFI_STA_CONNECTED, pdFALSE, pdTRUE, timeout) & WIFI_STA_CONNECTED) != 0;
+  return (statesWait(NETWORK_CONNECTED, pdFALSE, pdFALSE, timeout) & NETWORK_CONNECTED) != 0;
 }
 
-bool statesWiFiWaitMs(TickType_t timeout)
+bool statesNetworkWaitMs(TickType_t timeout)
 {
-  return (statesWaitMs(WIFI_STA_CONNECTED, pdFALSE, pdTRUE, timeout) & WIFI_STA_CONNECTED) != 0;
+  return (statesWaitMs(NETWORK_CONNECTED, pdFALSE, pdTRUE, timeout) & NETWORK_CONNECTED) != 0;
 }
 
 bool statesInetIsAvailabled()
 {
-  return statesCheck(WIFI_STA_CONNECTED | INET_AVAILABLED, false);
+  return statesCheckAny(NETWORK_CONNECTED, false) && statesCheck(INET_AVAILABLED, false);
 }
 
 bool statesInetIsDelayed()
 {
-  return statesCheck(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN, false);
+  return statesCheckAny(NETWORK_CONNECTED, false) && statesCheck(INET_AVAILABLED | INET_SLOWDOWN, false);
 }
 
 bool statesInetIsGood(bool checkRssi)
 {
-  return statesInetIsAvailabled() 
-      && !statesCheck(INET_SLOWDOWN, false) 
-      && (!checkRssi || wifiRSSIIsOk());
+  bool ret = statesInetIsAvailabled() && !statesCheck(INET_SLOWDOWN, false); 
+  #if !defined(CONFIG_WIFI_ENABLED) || (CONFIG_WIFI_ENABLED == 1)
+  ret = ret && (!checkRssi || wifiRSSIIsOk());
+  #endif // CONFIG_WIFI_ENABLED
+  return ret;
 }
 
 bool statesInetWait(TickType_t timeout)
 {
-  return (statesWait(WIFI_STA_CONNECTED | INET_AVAILABLED, pdFALSE, pdTRUE, timeout) & (WIFI_STA_CONNECTED | INET_AVAILABLED)) != 0;
+  return statesNetworkWait(timeout) && statesCheck(INET_AVAILABLED, false); 
 }
 
 bool statesInetWaitMs(TickType_t timeout)
 {
-  return (statesWaitMs(WIFI_STA_CONNECTED | INET_AVAILABLED, pdFALSE, pdTRUE, timeout) & (WIFI_STA_CONNECTED | INET_AVAILABLED)) != 0;
+  return statesNetworkWaitMs(timeout) && statesCheck(INET_AVAILABLED, false); 
 }
 
 // Time
@@ -387,9 +402,9 @@ bool statesMqttIsLocal()
 bool statesMqttIsEnabled()
 {
   if (statesMqttIsLocal()) {
-    return statesWiFiIsConnected();
+    return statesNetworkIsConnected();
   } else {
-    return statesWiFiIsConnected() && statesInetIsAvailabled();
+    return statesNetworkIsConnected() && statesInetIsAvailabled();
   };
 }
 
@@ -478,13 +493,15 @@ bool statesSetError(EventBits_t bit, bool state)
 char* statesGetJson()
 {
   EventBits_t states = statesGet(); 
-  return malloc_stringf("{\"ota\":%d,\"rtc_enabled\":%d,\"sntp_sync\":%d,\"silent_mode\":%d,\"wifi_sta_started\":%d,\"wifi_sta_connected\":%d,\"inet_availabled\":%d,\"mqtt1_enabled\":%d,\"mqtt2_enabled\":%d,\"mqtt_connected\":%d,\"mqtt_primary\":%d,\"mqtt_local\":%d}",
+  return malloc_stringf("{\"ota\":%d,\"rtc_enabled\":%d,\"sntp_sync\":%d,\"silent_mode\":%d,\"wifi_sta_started\":%d,\"wifi_sta_connected\":%d,\"ethernet_started\":%d,\"ethernet_connected\":%d,\"inet_availabled\":%d,\"mqtt1_enabled\":%d,\"mqtt2_enabled\":%d,\"mqtt_connected\":%d,\"mqtt_primary\":%d,\"mqtt_local\":%d}",
     (states & SYSTEM_OTA) == SYSTEM_OTA,
     (states & TIME_RTC_ENABLED) == TIME_RTC_ENABLED,
     (states & TIME_SNTP_SYNC_OK) == TIME_SNTP_SYNC_OK,
     (states & TIME_SILENT_MODE) == TIME_SILENT_MODE,
     (states & WIFI_STA_STARTED) == WIFI_STA_STARTED,
     (states & WIFI_STA_CONNECTED) == WIFI_STA_CONNECTED,
+    (states & ETHERNET_STARTED) == ETHERNET_STARTED,
+    (states & ETHERNET_CONNECTED) == ETHERNET_CONNECTED,
     (states & INET_AVAILABLED) == INET_AVAILABLED,
     (states & MQTT_1_ENABLED) == MQTT_1_ENABLED,
     (states & MQTT_2_ENABLED) == MQTT_2_ENABLED,
@@ -828,7 +845,7 @@ void ledSysBlinkAuto()
     ledSysBlinkOn(CONFIG_LEDSYS_SENSOR_ERROR_QUANTITY, CONFIG_LEDSYS_SENSOR_ERROR_DURATION, CONFIG_LEDSYS_SENSOR_ERROR_INTERVAL);
   }
   #if !defined(CONFIG_OFFLINE_MODE) || (CONFIG_OFFLINE_MODE == 0)
-    else if (!(states & WIFI_STA_CONNECTED)) {
+    else if (!(states & NETWORK_CONNECTED)) {
       ledSysBlinkOn(CONFIG_LEDSYS_WIFI_INIT_QUANTITY, CONFIG_LEDSYS_WIFI_INIT_DURATION, CONFIG_LEDSYS_WIFI_INIT_INTERVAL);
     }
     else if (!(states & INET_AVAILABLED)) {
@@ -929,6 +946,14 @@ void ledSysBlinkAuto()
 #else
   #define ENABLE_NOTIFY_WIFI_STATUS 0
 #endif // CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
+
+#if defined(CONFIG_ETH_ENABLED) && (CONFIG_ETH_ENABLED == 1)
+  #if CONFIG_NOTIFY_TELEGRAM_ETH_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
+    #define ENABLE_NOTIFY_ETH_STATUS 1
+  #else
+    #define ENABLE_NOTIFY_ETH_STATUS 0
+  #endif // CONFIG_NOTIFY_TELEGRAM_ETH_STATUS || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
+#endif // CONFIG_ETH_ENABLED
 
 #if CONFIG_PINGER_ENABLE && (CONFIG_NOTIFY_TELEGRAM_INET_UNAVAILABLE || CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE)
   #define ENABLE_NOTIFY_INET_STATUS 1
@@ -1063,13 +1088,26 @@ static bool healthMonitorNotify(hm_notify_data_t *notify_data)
 }
 
 // --- WiFi --------------------------------------------------------------------------------------------------------------
-#if ENABLE_NOTIFY_WIFI_STATUS
-  
-  reHealthMonitor hmWifi(nullptr, HM_RECOVERY, 
-    encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, CONFIG_NOTIFY_TELEGRAM_WIFI_PRIORITY), 
-    CONFIG_MESSAGE_TG_WIFI_AVAILABLE, nullptr, CONFIG_NOTIFY_TELEGRAM_WIFI_THRESOLD, healthMonitorNotify);
+#if !defined(CONFIG_WIFI_ENABLED) || (CONFIG_WIFI_ENABLED == 1)
+  #if ENABLE_NOTIFY_WIFI_STATUS
+    
+    reHealthMonitor hmWifi(nullptr, HM_RECOVERY, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_WIFI_STATUS, CONFIG_NOTIFY_TELEGRAM_WIFI_PRIORITY), 
+      CONFIG_MESSAGE_TG_WIFI_AVAILABLE, nullptr, CONFIG_NOTIFY_TELEGRAM_WIFI_THRESOLD, healthMonitorNotify);
 
-#endif // ENABLE_NOTIFY_WIFI_STATUS
+  #endif // ENABLE_NOTIFY_WIFI_STATUS
+#endif // CONFIG_WIFI_ENABLED
+
+// --- Ethernet ----------------------------------------------------------------------------------------------------------
+#if defined(CONFIG_ETH_ENABLED) && (CONFIG_ETH_ENABLED == 1)
+  #if ENABLE_NOTIFY_ETH_STATUS
+    
+    reHealthMonitor hmEthernet(nullptr, HM_RECOVERY, 
+      encMsgOptions(MK_SERVICE, CONFIG_NOTIFY_TELEGRAM_ALERT_ETH_STATUS, CONFIG_NOTIFY_TELEGRAM_ETH_PRIORITY), 
+      CONFIG_MESSAGE_TG_ETH_AVAILABLE, nullptr, CONFIG_NOTIFY_TELEGRAM_ETH_THRESOLD, healthMonitorNotify);
+
+  #endif // ENABLE_NOTIFY_ETH_STATUS
+#endif // CONFIG_ETH_ENABLED
 
 // --- Ping --------------------------------------------------------------------------------------------------------------
 #if ENABLE_NOTIFY_INET_STATUS
@@ -1194,42 +1232,90 @@ static void healthMonitorsInetUnavailable(esp_err_t inetState, time_t timeState)
   #endif // ENABLE_NOTIFY_THINGSPEAK_STATUS
 }
 
-static void healthMonitorsWiFiAvailable(bool setWifiState)
-{
-  rlog_d(logTAG, "Sending wifi connect notifications");
+#if !defined(CONFIG_WIFI_ENABLED) || (CONFIG_WIFI_ENABLED == 1)
+  static void healthMonitorsWiFiAvailable(bool setWifiState)
+  {
+    rlog_d(logTAG, "Sending wifi connect notifications");
 
-  #if ENABLE_NOTIFY_WIFI_STATUS
-    if (setWifiState) {
-      hmWifi.setStateCustom(ESP_OK, time(nullptr), true, malloc_string(wifiGetSSID()));
+    #if ENABLE_NOTIFY_WIFI_STATUS
+      if (setWifiState) {
+        hmWifi.setStateCustom(ESP_OK, time(nullptr), true, malloc_string(wifiGetSSID()));
+      };
+    #endif // ENABLE_NOTIFY_WIFI_STATUS
+
+    if (statesNetworkIsConnected()) {
+      #if ENABLE_NOTIFY_INET_STATUS
+        hmInet.unlock();
+      #endif // ENABLE_NOTIFY_INET_STATUS
+
+      healthMonitorsInetAvailable(false);
     };
-  #endif // ENABLE_NOTIFY_WIFI_STATUS
+  }
 
-  #if ENABLE_NOTIFY_INET_STATUS
-    hmInet.unlock();
-  #endif // ENABLE_NOTIFY_INET_STATUS
+  static void healthMonitorsWiFiUnavailable(esp_err_t wifiState)
+  {
+    rlog_d(logTAG, "Sending wifi disconnect notifications");
 
-  healthMonitorsInetAvailable(false);
-}
+    #if ENABLE_NOTIFY_WIFI_STATUS
+      if (wifiState != ESP_OK) hmWifi.setState(wifiState, time(nullptr));
+    #endif // ENABLE_NOTIFY_WIFI_STATUS
 
-static void healthMonitorsWiFiUnavailable(esp_err_t wifiState)
-{
-  rlog_d(logTAG, "Sending wifi disconnect notifications");
+    if (!statesNetworkIsConnected()) {
+      #if ENABLE_NOTIFY_INET_STATUS
+        hmInet.lock();
+      #endif // ENABLE_NOTIFY_INET_STATUS
 
-  #if ENABLE_NOTIFY_WIFI_STATUS
-    if (wifiState != ESP_OK) hmWifi.setState(wifiState, time(nullptr));
-  #endif // ENABLE_NOTIFY_WIFI_STATUS
+      healthMonitorsInetUnavailable(ESP_ERR_INVALID_STATE, 0);
+    };
+  }
 
-  #if ENABLE_NOTIFY_INET_STATUS
-    hmInet.lock();
-  #endif // ENABLE_NOTIFY_INET_STATUS
+#endif // CONFIG_WIFI_ENABLED
 
-  healthMonitorsInetUnavailable(ESP_ERR_INVALID_STATE, 0);
-}
+#if defined(CONFIG_ETH_ENABLED) && (CONFIG_ETH_ENABLED == 1)
+
+  static void healthMonitorsEthernetAvailable(bool setEthernetState)
+  {
+    rlog_d(logTAG, "Sending ethernet connect notifications");
+
+    #if ENABLE_NOTIFY_ETH_STATUS
+      if (setEthernetState) {
+        hmEthernet.setStateCustom(ESP_OK, time(nullptr), true, nullptr);
+      };
+    #endif // ENABLE_NOTIFY_ETH_STATUS
+
+    if (statesNetworkIsConnected()) {
+      #if ENABLE_NOTIFY_INET_STATUS
+        hmInet.unlock();
+      #endif // ENABLE_NOTIFY_INET_STATUS
+
+      healthMonitorsInetAvailable(false);
+    };
+  }
+
+  static void healthMonitorsEthernetUnavailable(esp_err_t ethernetState)
+  {
+    rlog_d(logTAG, "Sending ethernet disconnect notifications");
+
+    #if ENABLE_NOTIFY_ETH_STATUS
+      if (ethernetState != ESP_OK) hmEthernet.setState(ethernetState, time(nullptr));
+    #endif // ENABLE_NOTIFY_ETH_STATUS
+
+    if (!statesNetworkIsConnected()) {
+      #if ENABLE_NOTIFY_INET_STATUS
+        hmInet.lock();
+      #endif // ENABLE_NOTIFY_INET_STATUS
+
+      healthMonitorsInetUnavailable(ESP_ERR_INVALID_STATE, 0);
+    };
+  }
+
+#endif // CONFIG_ETH_ENABLED)
 
 // -- Parameters ---------------------------------------------------------------------------------------------------------
 #if CONFIG_NOTIFY_TELEGRAM_CUSTOMIZABLE
   static uint32_t  _hmNotifyDelayFailure = CONFIG_NOTIFY_TELEGRAM_MINIMUM_FAILURE_TIME;
   static uint8_t   _hmNotifyWifi = CONFIG_NOTIFY_TELEGRAM_WIFI_STATUS;
+  static uint8_t   _hmNotifyEthernet = CONFIG_NOTIFY_TELEGRAM_ETH_STATUS;
   static uint8_t   _hmNotifyMqtt = CONFIG_NOTIFY_TELEGRAM_MQTT_STATUS;
   static uint8_t   _hmNotifyMqttErrors = CONFIG_NOTIFY_TELEGRAM_MQTT_ERRORS;
   #if CONFIG_PINGER_ENABLE
@@ -1258,13 +1344,25 @@ static void healthMonitorsWiFiUnavailable(esp_err_t wifiState)
       CONFIG_MQTT_PARAMS_QOS, (void*)&_hmNotifyDelayFailure);
 
     // -- WiFi --------------------------------------------------------------------
-    hmWifi.assignParams(nullptr, &_hmNotifyWifi);
-    paramsSetLimitsU8(
-      paramsRegisterValue(OPT_KIND_PARAMETER, OPT_TYPE_U8, nullptr, pgNotify,
-        CONFIG_NOTIFY_TELEGRAM_WIFI_KEY, CONFIG_NOTIFY_TELEGRAM_WIFI_FRIENDLY,
-        CONFIG_MQTT_PARAMS_QOS, (void*)&_hmNotifyWifi),
-      0, 1);
+    #if !defined(CONFIG_WIFI_ENABLED) || (CONFIG_WIFI_ENABLED == 1)
+      hmWifi.assignParams(nullptr, &_hmNotifyWifi);
+      paramsSetLimitsU8(
+        paramsRegisterValue(OPT_KIND_PARAMETER, OPT_TYPE_U8, nullptr, pgNotify,
+          CONFIG_NOTIFY_TELEGRAM_WIFI_KEY, CONFIG_NOTIFY_TELEGRAM_WIFI_FRIENDLY,
+          CONFIG_MQTT_PARAMS_QOS, (void*)&_hmNotifyWifi),
+        0, 1);
+    #endif // CONFIG_WIFI_ENABLED    
     
+    // -- Ethernet --------------------------------------------------------------------
+    #if defined(CONFIG_ETH_ENABLED) && (CONFIG_ETH_ENABLED == 1)
+      hmEthernet.assignParams(nullptr, &_hmNotifyEthernet);
+      paramsSetLimitsU8(
+        paramsRegisterValue(OPT_KIND_PARAMETER, OPT_TYPE_U8, nullptr, pgNotify,
+          CONFIG_NOTIFY_TELEGRAM_ETH_KEY, CONFIG_NOTIFY_TELEGRAM_ETH_FRIENDLY,
+          CONFIG_MQTT_PARAMS_QOS, (void*)&_hmNotifyEthernet),
+        0, 1);
+    #endif // CONFIG_ETH_ENABLED)
+
     // -- Ping --------------------------------------------------------------------
     #if CONFIG_PINGER_ENABLE
       hmInet.assignParams(&_hmNotifyDelayFailure, &_hmNotifyInet);
@@ -1346,6 +1444,7 @@ static void healthMonitorsWiFiUnavailable(esp_err_t wifiState)
 #else
 
   #define ENABLE_NOTIFY_WIFI_STATUS 0
+  #define ENABLE_NOTIFY_ETH_STATUS 0
   #define ENABLE_NOTIFY_INET_STATUS 0
   #define ENABLE_NOTIFY_MQTT_STATUS 0
   #define ENABLE_NOTIFY_MQTT_ERRORS 0
@@ -1425,19 +1524,19 @@ static char* statesGetDebugTrace(re_restart_debug_t *debug)
 static void statesEventCheckSystemStarted()
 {
   if (!statesCheck(SYSTEM_STARTED, false)) {
-    rlog_i(logTAG, "Check system started: wifi=%d, internet=%d, time=%d, mqtt=%d", 
-      statesCheck(WIFI_STA_CONNECTED, false), statesCheck(INET_AVAILABLED, false), 
+    rlog_i(logTAG, "Check system started: wifi=%d, ethernet=%d, internet=%d, time=%d, mqtt=%d", 
+      statesCheck(WIFI_STA_CONNECTED, false), statesCheck(ETHERNET_CONNECTED, false), statesCheck(INET_AVAILABLED, false), 
       (statesCheck(TIME_SNTP_SYNC_OK, false) || statesCheck(TIME_RTC_ENABLED, false)), 
       statesCheck(MQTT_CONNECTED, false));
 
     #if CONFIG_MQTT_OTA_ENABLE
-      if (statesCheck(WIFI_STA_CONNECTED, false) && statesCheck(MQTT_CONNECTED, false)) {
+      if ((statesCheck(WIFI_STA_CONNECTED, false) || statesCheck(ETHERNET_CONNECTED, false)) && statesCheck(MQTT_CONNECTED, false)) {
         statesFirmwareVerifyCompete();
       };
     #endif // CONFIG_MQTT_OTA_ENABLE
 
     if ((statesCheck(TIME_SNTP_SYNC_OK, false) || statesCheck(TIME_RTC_ENABLED, false)) 
-     && statesCheck(WIFI_STA_CONNECTED, false) 
+     && (statesCheck(WIFI_STA_CONNECTED, false) || statesCheck(ETHERNET_CONNECTED, false))
      && statesCheck(INET_AVAILABLED, false) 
      && statesCheck(MQTT_CONNECTED, false)) {
       statesSet(SYSTEM_STARTED);
@@ -1612,42 +1711,84 @@ static void statesEventHandlerTime(void* arg, esp_event_base_t event_base, int32
 static void statesEventHandlerWiFi(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
   switch (event_id) {
-    case RE_WIFI_STA_INIT:
-      statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
-      wdtRestartMqttBreak();
-      break;
+    #if !defined(CONFIG_WIFI_ENABLED) || (CONFIG_WIFI_ENABLED == 1)
+      case RE_WIFI_STA_INIT:
+        statesClear(WIFI_STA_STARTED | WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_INIT");
+        wdtRestartMqttBreak();
+        break;
 
-    case RE_WIFI_STA_STARTED:
-      statesSet(WIFI_STA_STARTED);
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
-      wdtRestartMqttBreak();
-      break;
+      case RE_WIFI_STA_STARTED:
+        statesSet(WIFI_STA_STARTED);
+        statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_STARTED");
+        wdtRestartMqttBreak();
+        break;
 
-    case RE_WIFI_STA_GOT_IP:
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
-      statesSet(WIFI_STA_CONNECTED | INET_AVAILABLED);
-      statesClear(INET_SLOWDOWN | MQTT_CONNECTED);
-      eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
-      #if CONFIG_ENABLE_STATES_NOTIFICATIONS
-        healthMonitorsWiFiAvailable(true);
-      #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
-      statesEventCheckSystemStarted();
-      wdtRestartMqttStart();
-      break;
+      case RE_WIFI_STA_GOT_IP:
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_GOT_IP");
+        statesSet(WIFI_STA_CONNECTED | INET_AVAILABLED);
+        statesClear(INET_SLOWDOWN | MQTT_CONNECTED);
+        eventLoopPost(RE_WIFI_EVENTS, RE_INET_PING_OK, nullptr, 0, portMAX_DELAY);
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS
+          healthMonitorsWiFiAvailable(true);
+        #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+        statesEventCheckSystemStarted();
+        wdtRestartMqttStart();
+        break;
 
-    case RE_WIFI_STA_DISCONNECTED:
-    case RE_WIFI_STA_STOPPED:
-      #if CONFIG_ENABLE_STATES_NOTIFICATIONS 
-        if (statesCheck(WIFI_STA_CONNECTED, false)) {
-          healthMonitorsWiFiUnavailable(ESP_ERR_INVALID_STATE);
+      case RE_WIFI_STA_DISCONNECTED:
+      case RE_WIFI_STA_STOPPED:
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS 
+          if (statesCheck(WIFI_STA_CONNECTED, false)) {
+            healthMonitorsWiFiUnavailable(ESP_ERR_INVALID_STATE);
+          };
+        #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
+        statesClear(WIFI_STA_CONNECTED);
+        if (!statesCheckAny(NETWORK_CONNECTED, false)) {
+          statesClear(INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
+          wdtRestartMqttBreak();
         };
-      #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
-      statesClear(WIFI_STA_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
-      // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_WIFI_STA_DISCONNECTED / RE_WIFI_STA_STOPPED");
-      wdtRestartMqttBreak();
-      break;
+        wdtRestartMqttBreak();
+        break;
+    #endif // CONFIG_WIFI_ENABLED
+
+    #if defined(CONFIG_ETH_ENABLED) && (CONFIG_ETH_ENABLED == 1)
+      case RE_ETHERNET_STARTED:
+        statesSet(ETHERNET_STARTED);
+        statesClear(ETHERNET_CONNECTED | INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_ETHERNET_STARTED");
+        wdtRestartMqttBreak();
+        break;
+
+      case RE_ETHERNET_GOT_IP:
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_ETHERNET_GOT_IP");
+        statesSet(ETHERNET_CONNECTED | INET_AVAILABLED);
+        statesClear(INET_SLOWDOWN | MQTT_CONNECTED);
+        eventLoopPost(RE_WIFI_EVENTS, RE_INET_PING_OK, nullptr, 0, portMAX_DELAY);
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS
+          healthMonitorsEthernetAvailable(true);
+        #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+        statesEventCheckSystemStarted();
+        wdtRestartMqttStart();
+        break;
+
+      case RE_ETHERNET_DISCONNECTED:
+      case RE_ETHERNET_STOPPED:
+        #if CONFIG_ENABLE_STATES_NOTIFICATIONS 
+          if (statesCheck(ETHERNET_CONNECTED, false)) {
+            healthMonitorsEthernetUnavailable(ESP_ERR_INVALID_STATE);
+          };
+        #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
+        // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_ETHERNET_DISCONNECTED / RE_ETHERNET_STOPPED");
+        statesClear(ETHERNET_CONNECTED);
+        if (!statesCheckAny(NETWORK_CONNECTED, false)) {
+          statesClear(INET_AVAILABLED | INET_SLOWDOWN | MQTT_CONNECTED);
+          wdtRestartMqttBreak();
+        };
+        break;
+    #endif // CONFIG_ETH_ENABLED)
 
     default:
       // Ignore...
@@ -1670,7 +1811,7 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
           healthMonitorsInetAvailable(true);
         };
       #endif // CONFIG_ENABLE_STATES_NOTIFICATIONS
-      eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_OK, nullptr, 0, portMAX_DELAY);
+      eventLoopPost(RE_WIFI_EVENTS, RE_INET_PING_OK, nullptr, 0, portMAX_DELAY);
       statesEventCheckSystemStarted();
       wdtRestartMqttCheck();
       break;
@@ -1683,10 +1824,10 @@ static void statesEventHandlerPing(void* arg, esp_event_base_t event_base, int32
 
     case RE_PING_INET_UNAVAILABLE:
       statesClear(INET_AVAILABLED | INET_SLOWDOWN);
-      eventLoopPost(RE_WIFI_EVENTS, RE_WIFI_STA_PING_FAILED, nullptr, 0, portMAX_DELAY);
+      eventLoopPost(RE_WIFI_EVENTS, RE_INET_PING_FAILED, nullptr, 0, portMAX_DELAY);
       // rlog_w(logTAG, DEBUG_LOG_EVENT_MESSAGE, event_base, "RE_PING_INET_UNAVAILABLE");
       #if CONFIG_ENABLE_STATES_NOTIFICATIONS
-        if (statesCheck(WIFI_STA_CONNECTED, false)) {
+        if (statesCheckAny(NETWORK_CONNECTED, false)) {
           if (event_data) {
             ping_inet_data_t* data = (ping_inet_data_t*)event_data;
             healthMonitorsInetUnavailable(ESP_ERR_TIMEOUT, data->time_unavailable);
