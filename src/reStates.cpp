@@ -159,7 +159,9 @@ void heapAllocFailedInit();
 
 void statesInit(bool registerEventHandler)
 {
-  statesFirmwareVerifyStart();
+  #if CONFIG_MQTT_OTA_ENABLE
+    statesFirmwareVerifyStart();
+  #endif // CONFIG_MQTT_OTA_ENABLE
 
   if (!_evgStates) {
     #if CONFIG_STATES_STATIC_ALLOCATION
@@ -191,8 +193,8 @@ void statesInit(bool registerEventHandler)
 
 void statesFree(bool unregisterEventHandler)
 {
-  #if defined(CONFIG_OTA_ROLLBACK_TIMEOUT) && (CONFIG_OTA_ROLLBACK_TIMEOUT > 0)
-  statesFirmwareVerifyTimerStop();
+  #if CONFIG_MQTT_OTA_ENABLE && defined(CONFIG_OTA_ROLLBACK_TIMEOUT) && (CONFIG_OTA_ROLLBACK_TIMEOUT > 0)
+    statesFirmwareVerifyTimerStop();
   #endif // CONFIG_OTA_ROLLBACK_TIMEOUT
 
   if (_evgStates) {
